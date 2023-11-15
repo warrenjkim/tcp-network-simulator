@@ -42,14 +42,64 @@ void build_packet(struct packet* pkt, unsigned short seqnum, unsigned short ackn
 
 // Utility function to print a packet
 void print_recv(struct packet* pkt) {
-    printf("RECV seq: %d acknum: %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", (pkt->ack) ? " ACK": "");
+    printf("RECV seqnum: %d acknum: %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", (pkt->ack) ? " ACK": "");
 }
 
 void print_send(struct packet* pkt, int resend) {
     if (resend)
-        printf("RESEND %d %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", pkt->ack ? " ACK": "");
+        printf("RESEND seqnum: %d acknum: %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", pkt->ack ? " ACK": "");
     else
         printf("SEND seqnum: %d acknum: %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", pkt->ack ? " ACK": "");
 }
+
+
+
+
+typedef enum Color {
+    RED,
+    BLACK
+} Color;
+
+
+typedef struct Node {
+    unsigned short id; // pkt.acknum
+    struct packet pkt;
+    Color color;
+    struct Node *parent;
+    struct Node *left;
+    struct Node *right;
+} Node;
+
+Node *node_init(const struct packet *pkt);
+void node_destroy(Node *node);
+
+typedef struct Tree {
+    Node *root;
+    size_t size;
+} Tree;
+
+Tree *rbt_init();
+Node *rbt_insert(Node *root, struct packet *pkt);
+Node *rbt_delete(Node *root, const unsigned short id);
+Node *rbt_successor(Node *node);
+Node *rbt_balance(Node *root);
+void rbt_ll_rotate(Node *root);
+Node *rbt_lr_rotate(Node *root);
+Node *rbt_rl_rotate(Node *root);
+Node *rbt_rr_rotate(Node *root);
+void rbt_inorder(Node *root);
+Node *grandparent(Node *node);
+Node *uncle(Node* node);
+Node *recolor();
+
+
+
+
+
+// red black tree properties
+// 1. every node is either RED or BLACK
+// 2. root and leaves is/are always BLACK
+// 3. RED nodes cannot have RED children
+// 4. every path from a node to any of its leaves have the same number of BLACK nodes
 
 #endif

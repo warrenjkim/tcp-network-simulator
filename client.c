@@ -17,13 +17,6 @@ int main(int argc, char *argv[]) {
     tv.tv_sec = TIMEOUT;
     tv.tv_usec = 0;
 
-    struct packet pkt;
-    struct packet ack_pkt;
-    char buffer[PAYLOAD_SIZE];
-    unsigned short seq_num = 0;
-    unsigned short ack_num = 0;
-    char last = 0;
-    char ack = 0;
 
     // read filename from command line argument
     if (argc != 2) {
@@ -85,39 +78,80 @@ int main(int argc, char *argv[]) {
     }
 
     // TODO: Read from file, and initiate reliable data transfer to the server
-    struct packet cwnd[WINDOW_SIZE];
+    
+
+
+    struct packet pkt;
+    struct packet ack_pkt;
+    char buffer[PAYLOAD_SIZE];
+    unsigned short seq_num = 0;
+    unsigned short ack_num = 0;
+    char last = 0;
+    char ack = 0;
+
     ssize_t bytes_read = 0;
-    int i = 0;
-    while (0 < (bytes_read = fread(buffer, sizeof(char), sizeof(buffer) - 1, fp))) {
-        if (i == WINDOW_SIZE) {
-            printf("cwnd full!\n");
-        }
+    size_t i = 0;
+
+    struct packet swnd[1000];
+
+    do {
+        bytes_read = fread(buffer, sizeof(char), PAYLOAD_SIZE, fp);
 
         build_packet(&pkt, seq_num, ack_num, last, ack, sizeof(buffer) - 1, buffer);
-        sendto(send_sockfd, &pkt, sizeof(pkt), 0, (const struct sockaddr *) &server_addr_to, addr_size);
-        print_send(&pkt, 0);
+        swnd[i++] = pkt;
 
-        cwnd[(i++ % WINDOW_SIZE)] = pkt;
+        sendto(send_sockfd, &pkt, sizeof(pkt), MSG_CONFIRM, (const struct sockaddr *) &server_addr_to, addr_size);
+        print_send(&pkt, last);
 
-        ssize_t bytes_recv = recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL, (struct sockaddr *) &server_addr_from, &addr_size);
-        seq_num += bytes_recv + 1;
-        ack_num = ack_pkt.acknum;
+        recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL, (struct sockaddr *) &server_addr_from, &addr_size);
         print_recv(&ack_pkt);
-        
+
         while (ack_pkt.last) {
-            sendto(send_sockfd, &pkt, sizeof(pkt), 0, (const struct sockaddr *) &server_addr_to, addr_size);
-            print_send(&pkt, 1);
+            if (ack_num <= ack_pkt.acknum)
+                break;
+            sendto(send_sockfd, &swnd[ack_pkt.acknum], sizeof(swnd[ack_pkt.acknum]), MSG_CONFIRM, (const struct sockaddr *) &server_addr_to, addr_size);
+            print_send(&swnd[ack_pkt.acknum], last);
 
-            cwnd[(i++ % WINDOW_SIZE)] = pkt;
-
-            bytes_recv = recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL, (struct sockaddr *) &server_addr_from, &addr_size);
-            seq_num += bytes_recv + 1;
-            ack_num = ack_pkt.acknum;
+            recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL, (struct sockaddr *) &server_addr_from, &addr_size);
             print_recv(&ack_pkt);
         }
-    }
+        
+        seq_num = ack_pkt.seqnum;
+        ack_num = ack_pkt.acknum;
+
+        printf("\n");
+    } while (0 < bytes_read);
 
     sendto(send_sockfd, NULL, 0, 0, (const struct sockaddr *) &server_addr_to, addr_size);
+
+
+    // struct packet cwnd;
+    // ssize_t bytes_read = 0;
+    // while (0 < (bytes_read = fread(buffer, sizeof(char), sizeof(buffer) - 1, fp))) {
+    //     build_packet(&pkt, seq_num, ack_num, last, ack, sizeof(buffer) - 1, buffer);
+    //     sendto(send_sockfd, &pkt, sizeof(pkt), 0, (const struct sockaddr *) &server_addr_to, addr_size);
+    //     print_send(&pkt, 0);
+
+    //     while (ack_pkt.last) {
+    //         sendto(send_sockfd, &cwnd, sizeof(cwnd), 0, (const struct sockaddr *) &server_addr_to, addr_size);
+    //         print_send(&pkt, 1);
+
+    //         recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL, (struct sockaddr *) &server_addr_from, &addr_size);
+    //         seq_num += 1;
+    //         ack_num = ack_pkt.acknum;
+    //         print_recv(&ack_pkt);
+    //     }
+
+    //     recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL, (struct sockaddr *) &server_addr_from, &addr_size);
+    //     seq_num += 1;
+    //     ack_num = ack_pkt.acknum + 1;
+    //     print_recv(&ack_pkt);
+    //     
+
+    //     cwnd = pkt;
+    // }
+
+    // sendto(send_sockfd, NULL, 0, 0, (const struct sockaddr *) &server_addr_to, addr_size);
 
  
     

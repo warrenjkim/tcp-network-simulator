@@ -9,11 +9,7 @@
 int main() {
     int listen_sockfd, send_sockfd;
     struct sockaddr_in server_addr, client_addr_from, client_addr_to;
-    struct packet buffer;
     socklen_t addr_size = sizeof(client_addr_from);
-    int expected_seq_num = 0;
-    int recv_len;
-    struct packet ack_pkt;
 
     // Create a UDP socket for sending
     send_sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -57,36 +53,65 @@ int main() {
     }
 
     // TODO: Receive file from the client and save it as output.txt
+    struct packet buffer;
+    struct packet ack_pkt;
+    int expected_seq_num = 0;
+    unsigned short ack_num = 0;
+    unsigned char ack = 0;
+    unsigned char last = 0;
 
-     while (1) {
+    int recv_len = 0;
+
+    do {
         recv_len = recvfrom(listen_sockfd, &buffer, sizeof(buffer), MSG_WAITALL, (struct sockaddr *) &client_addr_from, &addr_size);
         print_recv(&buffer);
-        unsigned short ack_num = buffer.acknum + recv_len + 1;
-        unsigned char last = 0;
-        unsigned char ack = 0;
-
-        if (recv_len <= 0) {
-            break;
-        }
 
         if (buffer.seqnum == expected_seq_num) {
+            expected_seq_num = buffer.seqnum + 1;
+            ack_num = buffer.acknum + 1;
             ack = 1;
-            expected_seq_num += recv_len + 1;
+            last = 0;
             fprintf(fp, "%s", buffer.payload);
         }
-        else if (buffer.seqnum < expected_seq_num) {
-            ack = 1;
-        }
         else {
+            ack = 0;
             last = 1;
-            printf("\nbuffer: %d\n", buffer.seqnum);
-            printf("expected: %d\n\n", expected_seq_num);
         }
-
+        
         build_packet(&ack_pkt, expected_seq_num, ack_num, last, ack, 0, "");
+
         sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), 0, (const struct sockaddr *) &client_addr_to, addr_size);
         print_send(&ack_pkt, last);
-     }
+        printf("\n");
+    } while (0 < recv_len);
+
+    // while (1) {
+    //     recv_len = recvfrom(listen_sockfd, &buffer, sizeof(buffer), MSG_WAITALL, (struct sockaddr *) &client_addr_from, &addr_size);
+    //     print_recv(&buffer);
+    //     unsigned short ack_num = expected_seq_num;
+    //     unsigned char last = 0;
+    //     unsigned char ack = 0;
+
+    //     if (recv_len <= 0) {
+    //         break;
+    //     }
+
+    //     if (buffer.seqnum <= expected_seq_num) {
+    //         ack = 1;
+    //         expected_seq_num++;
+    //         ack_num = expected_seq_num;
+    //         fprintf(fp, "%s", buffer.payload);
+    //     }
+    //     else {
+    //         last = 1;
+    //         printf("\nbuffer: %d\n", buffer.seqnum);
+    //         printf("expected: %d\n\n", expected_seq_num);
+    //     }
+
+    //     build_packet(&ack_pkt, expected_seq_num, ack_num, last, ack, 0, "");
+    //     sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), 0, (const struct sockaddr *) &client_addr_to, addr_size);
+    //     print_send(&ack_pkt, last);
+    // }
 
 
 
