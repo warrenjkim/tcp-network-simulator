@@ -31,27 +31,12 @@ struct packet {
 };
 
 // Utility function to build a packet
-void build_packet(struct packet* pkt, unsigned short seqnum, unsigned short acknum, char last, char ack,unsigned int length, const char* payload) {
-    pkt->seqnum = seqnum;
-    pkt->acknum = acknum;
-    pkt->ack = ack;
-    pkt->last = last;
-    pkt->length = length;
-    memcpy(pkt->payload, payload, length);
-}
+void build_packet(struct packet* pkt, unsigned short seqnum, unsigned short acknum, char last, char ack,unsigned int length, const char* payload);
 
 // Utility function to print a packet
-void print_recv(struct packet* pkt) {
-    printf("RECV seqnum: %d acknum: %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", (pkt->ack) ? " ACK": "");
-}
+void print_recv(struct packet* pkt);
 
-void print_send(struct packet* pkt, int resend) {
-    if (resend)
-        printf("RESEND seqnum: %d acknum: %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", pkt->ack ? " ACK": "");
-    else
-        printf("SEND seqnum: %d acknum: %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", pkt->ack ? " ACK": "");
-}
-
+void print_send(struct packet* pkt, int resend);
 
 
 
@@ -79,19 +64,26 @@ typedef struct Tree {
 } Tree;
 
 Tree *rbt_init();
-Node *rbt_insert(Node *root, struct packet *pkt);
+void rbt_destroy(Tree *tree);
+
+Node *node_insert(Node *root, struct packet *pkt, Node **Z);
+Node *rbt_insert(Node *root, struct packet *pkt, size_t *size);
 Node *rbt_delete(Node *root, const unsigned short id);
 Node *rbt_successor(Node *node);
-Node *rbt_balance(Node *root);
-void rbt_ll_rotate(Node *root);
-Node *rbt_lr_rotate(Node *root);
-Node *rbt_rl_rotate(Node *root);
-Node *rbt_rr_rotate(Node *root);
-void rbt_inorder(Node *root);
-Node *grandparent(Node *node);
-Node *uncle(Node* node);
-Node *recolor();
 
+Node *rbt_restructure(Node *root);
+Node *rbt_balance(Node *root);
+Node *rbt_ll_rotate(Node *X);
+Node *rbt_rr_rotate(Node *X);
+Node *rbt_lr_rotate(Node *X);
+Node *rbt_rl_rotate(Node *X);
+
+Node *rbt_grandparent(Node *node);
+Node *rbt_uncle(Node *node);
+Node *rbt_recolor(Node *Z);
+
+void rbt_inorder(Node *root);
+void rbt_print_tree(Node *root, size_t space);
 
 
 

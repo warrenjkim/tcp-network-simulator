@@ -1,5 +1,27 @@
 #include "utils.h"
 
+// Utility function to build a packet
+void build_packet(struct packet* pkt, unsigned short seqnum, unsigned short acknum, char last, char ack,unsigned int length, const char* payload) {
+    pkt->seqnum = seqnum;
+    pkt->acknum = acknum;
+    pkt->ack = ack;
+    pkt->last = last;
+    pkt->length = length;
+    memcpy(pkt->payload, payload, length);
+}
+
+// Utility function to print a packet
+void print_recv(struct packet* pkt) {
+    printf("RECV seqnum: %d acknum: %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", (pkt->ack) ? " ACK": "");
+}
+
+void print_send(struct packet* pkt, int resend) {
+    if (resend)
+        printf("RESEND seqnum: %d acknum: %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", pkt->ack ? " ACK": "");
+    else
+        printf("SEND seqnum: %d acknum: %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", pkt->ack ? " ACK": "");
+}
+
 // node
 Node *node_init(const struct packet *pkt) {
     Node *node = (Node *)(malloc(sizeof(Node)));
@@ -34,24 +56,45 @@ Tree *rbt_init() {
         perror("tree initialization failed");
         exit(1);
     }
+
     tree->size = 0;
     tree->root = NULL;
 
     return tree;
 }
 
+Node *node_insert(Node *root, struct packet *pkt, Node **Z) {
+    if (!root) {
+        *Z = node_init(pkt);
+        return *Z;
+    }
+    if (pkt->acknum < root->id) {
+        root->left = node_insert(root->left, pkt, Z);
+        root->left->parent = root;
+    }
+    else if (root->id < pkt->acknum) {
+        root->right = node_insert(root->right, pkt, Z);
+        root->right->parent = root;
+    }
 
-Node *rbt_insert(Node *root, struct packet *pkt) {
-    if (!root)
-        return node_init(pkt);
 
-    if (root->id < pkt->acknum)
-        root->left = rbt_insert(root->left, pkt);
-    else if (pkt->acknum < root->id)
-        root->right = rbt_insert(root->right, pkt);
-    
-    root = rbt_balance(root);
-    root->color = BLACK;
+    return root;
+}
+
+Node *rbt_insert(Node *root, struct packet *pkt, size_t *size) {
+    Node *Z = NULL;
+
+    root = node_insert(root, pkt, &Z);
+    if (Z) {
+        *size += 1;
+        rbt_balance(Z);
+    }
+
+    while (root && root->parent) 
+        root = root->parent;
+
+    if (root)
+        root->color = BLACK;
 
     return root;
 }
@@ -99,28 +142,99 @@ Node *rbt_successor(Node *root) {
 }
 
 
-Node *grandparent(Node *node) {
-    return node->parent->parent;
-}
+Node *rbt_restructure(Node *Z) {
+    Node *X = rbt_grandparent(Z);
 
 
-Node *uncle(Node *node) {
-    return grandparent(node)->right;
-}
-
-
-Node *rbt_balance(Node *root) {
-    // case 1 (double red)
-    if (grandparent(root)->color == RED && root->parent->color == RED)
-        recolor();
-    else {
-
+    if (X->left == Z->parent) {
+        if (Z == Z->parent->left)
+            X = rbt_ll_rotate(X);
+        else
+            X = rbt_lr_rotate(X);
     }
-    return NULL;
+    else if (X->right == Z->parent) { 
+        if (Z == Z->parent->left)
+            X = rbt_rl_rotate(X);
+        else
+            X = rbt_rr_rotate(X);
+    }
+    
+    X->color = BLACK;
+
+    if (X->left)
+        X->left->color = RED;
+
+    if (X->right)
+        X->right->color = RED;
+
+    return X;
 }
 
 
-void rbt_ll_rotate(Node *X) {
+Node *rbt_recolor(Node *Z) {
+    Node *X = rbt_grandparent(Z);
+    Node *uncle = rbt_uncle(Z);
+
+    Z->parent->color = BLACK;
+
+    if (uncle)
+        uncle->color = BLACK;
+
+    if (X)
+        X->color = RED;
+
+    return X;
+}
+
+
+Node *rbt_balance(Node *Z) {
+    if (!Z || !Z->parent) {
+        if (Z)
+            Z->color = BLACK;
+        return Z;
+    }
+
+    if (Z->color == RED && Z->parent->color == RED) {
+        Node *uncle = rbt_uncle(Z);
+        if (!uncle || uncle->color == BLACK) {
+            Z = rbt_restructure(Z);
+            return rbt_balance(Z);
+        }
+        else {
+            Z = rbt_recolor(Z);
+            return rbt_balance(rbt_grandparent(Z));
+        }
+    }
+
+    return rbt_balance(Z->parent);
+}
+
+
+Node *rbt_ll_rotate(Node *X) {
+    Node *Y = X->left;
+    Node *T = Y->right;
+
+    X->left = T;
+    Y->right = X;
+
+    Y->parent = X->parent;
+    X->parent = Y;
+
+    if (T)
+        T->parent = X;
+
+    if (Y->parent) {
+        if (Y->parent->left == X)
+            Y->parent->left = Y;
+        else
+            Y->parent->right = Y;
+    }
+
+    return Y;
+}
+
+
+Node *rbt_rr_rotate(Node *X) {
     Node *Y = X->right;
     Node *T = Y->left;
 
@@ -139,11 +253,74 @@ void rbt_ll_rotate(Node *X) {
         else
             Y->parent->right = Y;
     }
+
+    return Y;
 }
 
 
-Node *rbt_lr_rotate(Node *root) {
-    return NULL;
+Node *rbt_lr_rotate(Node *X) {
+    Node *Y = X->left;
+    Node *Z = Y->right;
+
+    Node *T1 = Z->left;
+    Node *T2 = Z->right;
+
+    Z->parent = X->parent;
+    Z->left = Y;
+    Z->right = X;
+
+    Y->right = T1;
+    Y->parent = Z;
+
+    X->parent = Z;
+    X->left = T2;
+
+    if (T1)
+        T1->parent = Y;
+    if (T2)
+        T2->parent = X;
+
+    if (Z->parent) {
+        if (Z->parent->left == X)
+            Z->parent->left = Z;
+        else 
+            Z->parent->right = Z;
+    }
+
+    return Z;
+}
+
+
+Node *rbt_rl_rotate(Node *X) {
+    Node *Y = X->right;
+    Node *Z = Y->left;
+
+    Node *T1 = Z->left;
+    Node *T2 = Z->right;
+
+    Z->parent = X->parent;
+    Z->left = X;
+    Z->right = Y;
+
+    X->parent = Z;
+    X->right = T1;
+
+    Y->parent = Z;
+    Y->left = T2;
+
+    if (T1)
+        T1->parent = X;
+    if (T2)
+        T2->parent = Y;
+
+    if (Z->parent) {
+        if (Z->parent->left == X)
+            Z->parent->left = Z;
+        else
+            Z->parent->right = Z;
+    }
+
+    return Z;
 }
 
 
@@ -153,6 +330,39 @@ void rbt_inorder(Node *root) {
     }
 
     rbt_inorder(root->left); 
-    printf("acknum: %d\n", root->pkt.acknum);
+    printf("%d ", root->pkt.acknum);
     rbt_inorder(root->right); 
+}
+
+
+Node *rbt_grandparent(Node *node) {
+    if (!node || !node->parent)
+        return NULL;
+
+    return node->parent->parent;
+}
+
+
+Node *rbt_uncle(Node *node) {
+    if (!node || !node->parent || !rbt_grandparent(node))
+        return NULL;
+
+    Node *gp = rbt_grandparent(node);
+    return gp->left == node->parent ? gp->right : gp->left;
+}
+
+
+void rbt_print_tree(Node *root, size_t space) {
+    if (root) {
+        space += 10;
+
+        rbt_print_tree(root->right, space);
+        printf("\n");
+
+        for (int i = 10; i < space; i++)
+            printf(" ");
+
+        printf("%d(%s)\n", root->id, root->color == RED ? "R" : "B");
+        rbt_print_tree(root->left, space);
+    }
 }
