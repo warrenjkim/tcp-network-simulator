@@ -13,7 +13,7 @@
 #define SERVER_PORT 6002
 #define CLIENT_PORT_TO 5001
 #define PAYLOAD_SIZE 1024
-#define WINDOW_SIZE 5
+#define WINDOW_SIZE 10
 #define TIMEOUT 2
 #define MAX_SEQUENCE 1024
 
@@ -63,6 +63,12 @@ typedef struct Tree {
     size_t size;
 } Tree;
 
+
+typedef struct Heap {
+    struct packet data[WINDOW_SIZE];
+    size_t size;
+} Heap;
+
 Tree *rbt_init();
 void rbt_destroy(Tree *tree);
 
@@ -85,13 +91,24 @@ Node *rbt_recolor(Node *Z);
 void rbt_inorder(Node *root);
 void rbt_print_tree(Node *root, size_t space);
 
-
-
-
 // red black tree properties
 // 1. every node is either RED or BLACK
 // 2. root and leaves is/are always BLACK
 // 3. RED nodes cannot have RED children
 // 4. every path from a node to any of its leaves have the same number of BLACK nodes
+
+
+
+Heap *heap_init();
+void heap_destroy(Node *root);
+
+
+Heap *heap_push(Heap *heap, struct packet *pkt);
+Heap *heap_pop(Heap *heap);
+
+struct packet heap_top(Heap *heap);
+Heap *heap_heapify(Heap *heap, size_t index);
+
+
 
 #endif
