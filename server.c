@@ -61,29 +61,104 @@ int main() {
     unsigned char last = 0;
 
     int recv_len = 0;
+    Heap *heap = heap_init();
+    struct packet expected;
 
-    do {
-        recv_len = recvfrom(listen_sockfd, &buffer, sizeof(buffer), MSG_WAITALL, (struct sockaddr *) &client_addr_from, &addr_size);
-        print_recv(&buffer);
+    
+    while (1) {
+         recv_len = recvfrom(listen_sockfd, &buffer, sizeof(buffer), MSG_WAITALL, (struct sockaddr *) &client_addr_from, &addr_size);
+         print_recv(&buffer);
 
-        if (buffer.seqnum == expected_seq_num) {
-            expected_seq_num = buffer.seqnum + 1;
-            ack_num = buffer.acknum + 1;
-            ack = 1;
-            last = 0;
-            fprintf(fp, "%s", buffer.payload);
-        }
-        else {
-            ack = 0;
-            last = 1;
-        }
-        
-        build_packet(&ack_pkt, expected_seq_num, ack_num, last, ack, 0, "");
+         if (recv_len <= 0)
+             break;
 
-        sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), 0, (const struct sockaddr *) &client_addr_to, addr_size);
-        print_send(&ack_pkt, last);
-        printf("\n");
-    } while (0 < recv_len);
+         heap = heap_push(heap, &buffer);
+
+         if (heap->size == WINDOW_SIZE) {
+             printf("window full. writing to file\n");
+             while (0 < heap->size) {
+                 if (expected_seq_num == heap_top(heap).seqnum) {
+                     expected = heap_top(heap);
+                     expected_seq_num++;
+                     fprintf(fp, "%s", heap_top(heap).payload);
+                     printf("wrote seqnum: %d\n", expected.seqnum);
+                     heap = heap_pop(heap);
+                     ack_num = expected_seq_num;
+                 }
+                 else {
+                     ack = 0;
+                     ack_num = expected.seqnum; 
+                     build_packet(&ack_pkt, expected_seq_num, ack_num, last, ack, 0, "");
+
+                     sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), 0, (const struct sockaddr *) &client_addr_to, addr_size);
+                     print_send(&ack_pkt, last);
+
+                     recv_len = recvfrom(listen_sockfd, &buffer, sizeof(buffer), MSG_WAITALL, (struct sockaddr *) &client_addr_from, &addr_size);
+                     print_recv(&buffer);
+                 }
+             }
+         }
+
+         if (ack_num == buffer.seqnum) {
+             ack_num++;
+             ack = 1;
+         }
+         else {
+             ack = 0;
+         }
+         build_packet(&ack_pkt, ack_num, ack_num, last, ack, 0, "");
+         sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), 0, (const struct sockaddr *) &client_addr_to, addr_size);
+         print_send(&ack_pkt, last);
+         printf("\n");
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // do {
+    //     recv_len = recvfrom(listen_sockfd, &buffer, sizeof(buffer), MSG_WAITALL, (struct sockaddr *) &client_addr_from, &addr_size);
+    //     print_recv(&buffer);
+
+    //     if (buffer.seqnum == expected_seq_num) {
+    //         expected_seq_num = buffer.seqnum + 1;
+    //         ack_num = buffer.acknum + 1;
+    //         ack = 1;
+    //         last = 0;
+    //         fprintf(fp, "%s", buffer.payload);
+    //     }
+    //     else {
+    //         ack = 0;
+    //         last = 1;
+    //     }
+    //     
+    //     build_packet(&ack_pkt, expected_seq_num, ack_num, last, ack, 0, "");
+
+    //     sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), 0, (const struct sockaddr *) &client_addr_to, addr_size);
+    //     print_send(&ack_pkt, last);
+    //     printf("\n");
+    // } while (0 < recv_len);
 
     // while (1) {
     //     recv_len = recvfrom(listen_sockfd, &buffer, sizeof(buffer), MSG_WAITALL, (struct sockaddr *) &client_addr_from, &addr_size);
