@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <stdbool.h>
 
 // MACROS
 #define SERVER_IP "127.0.0.1"
@@ -13,7 +14,7 @@
 #define SERVER_PORT 6002
 #define CLIENT_PORT_TO 5001
 #define PAYLOAD_SIZE 1024
-#define WINDOW_SIZE 10
+#define WINDOW_SIZE 5
 #define TIMEOUT 2
 #define MAX_SEQUENCE 1024
 
@@ -49,7 +50,6 @@ typedef enum Color {
 
 typedef struct Node {
     unsigned short id;
-    size_t count;
     Color color;
     struct Node *parent;
     struct Node *left;
@@ -74,12 +74,14 @@ Tree *rbt_init();
 void rbt_destroy(Tree *tree);
 
 Node *node_insert(Node *root, struct packet *pkt, Node **Z);
+Node *node_delete(Node *root, Node *V);
 Node *rbt_insert(Node *root, struct packet *pkt, size_t *size);
 Node *rbt_delete(Node *root, const unsigned short id);
 Node *rbt_successor(Node *node);
 
 Node *rbt_restructure(Node *root);
-Node *rbt_balance(Node *root);
+Node *rbt_balance_insert(Node *root);
+Node *rbt_double_black(Node *root, Node *V);
 Node *rbt_ll_rotate(Node *X);
 Node *rbt_rr_rotate(Node *X);
 Node *rbt_lr_rotate(Node *X);
@@ -87,10 +89,14 @@ Node *rbt_rl_rotate(Node *X);
 
 Node *rbt_grandparent(Node *node);
 Node *rbt_uncle(Node *node);
+Node *rbt_sibling(Node *node);
 Node *rbt_recolor(Node *Z);
+
 
 void rbt_inorder(Node *root);
 void rbt_print_tree(Node *root, size_t space);
+
+unsigned short rbt_next(Node *root, unsigned short *expected);
 
 // red black tree properties
 // 1. every node is either RED or BLACK
@@ -109,6 +115,36 @@ Heap *heap_pop(Heap *heap);
 
 struct packet heap_top(Heap *heap);
 Heap *heap_heapify(Heap *heap, size_t index);
+
+
+
+
+
+
+typedef struct CQueue {
+    struct packet data[WINDOW_SIZE];
+    size_t size;
+    size_t head;
+    size_t tail;
+} CQueue;
+
+CQueue *cqueue_init();
+void cqueue_destroy(CQueue *queue);
+
+CQueue *cqueue_push(CQueue *queue, struct packet *pkt);
+CQueue *cqueue_pop(CQueue *queue, const unsigned short seqnum);
+
+bool cqueue_empty(CQueue *queue);
+bool cqueue_full(CQueue *queue);
+
+struct packet *cqueue_get(CQueue *queue, const unsigned short seqnum);
+
+
+
+
+
+
+
 
 
 

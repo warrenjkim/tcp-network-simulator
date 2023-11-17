@@ -9,7 +9,6 @@ Node *node_init(const struct packet *pkt) {
     }
 
     node->id = pkt->acknum;
-    node->count = 1;
     node->left = NULL;
     node->right = NULL;
     node->parent = NULL;
@@ -63,13 +62,142 @@ Node *node_insert(Node *root, struct packet *pkt, Node **Z) {
 }
 
 
+Node *rbt_replacement(Node *root) {
+    if (root->left && root->right)
+        return rbt_successor(root->right);
+
+    if (!root->left && !root->right)
+        return NULL;
+
+    return root->left ? root->left : root->right;
+}
+
+
+Node *node_delete(Node *root, Node *V) {
+    Node *U = rbt_replacement(V);
+    Node *parent = V->parent;
+    bool double_black = (!U || U->color == BLACK) && (V->color == BLACK);
+
+    if (!U) {
+        if (V == root)
+            root = NULL;
+        else {
+            if (double_black)
+                root = rbt_double_black(root, V);
+            else {
+                Node *sibling = rbt_sibling(V);
+                if (sibling)
+                    sibling->color = RED;
+            }
+
+            if (parent) {
+                if (parent->left == V)
+                    parent->left = NULL;
+                else
+                    parent->right = NULL;
+            }
+
+            node_destroy(V);
+            return root;
+        }
+    }
+
+    if (!V->left || !V->right) {
+        if (V == root) {
+            V->id = U->id;
+            V->left = V->right = NULL;
+            free(U);
+        }
+        else if (parent) {
+            if (parent->left == V)
+                parent->left = U;
+            else
+                parent->right = U;
+
+            node_destroy(V);
+            U->parent = parent;
+
+            if (double_black)
+                root = rbt_double_black(root, U);
+            else
+                U->color = BLACK;
+        }
+        return root;
+    }
+
+    unsigned short temp = U->id;
+    U->id = V->id;
+    V->id = temp;
+
+    return node_delete(root, U);
+}
+
+
+Node *rbt_double_black(Node *root, Node *X) {
+    if (X == root) {
+        root->color = BLACK;
+        return root;
+    }
+
+    Node *parent = X->parent;
+    Node *sibling = (X == parent->left) ? parent->right : parent->left;
+
+    if (sibling && sibling->color == RED) {
+        parent->color = RED;
+        sibling->color = BLACK;
+        if (X == parent->left) {
+            root = rbt_ll_rotate(parent);
+        } else {
+            root = rbt_rr_rotate(parent);
+        }
+        return rbt_double_black(root, X);
+    } 
+    else if (!sibling || (sibling->left->color == BLACK && sibling->right->color == BLACK)) {
+        if (sibling)
+            sibling->color = RED;
+        if (parent->color == BLACK)
+            return rbt_double_black(root, parent);
+        else {
+            parent->color = BLACK;
+            return root;
+        }
+    } 
+    else {
+        if (sibling->left && sibling->left->color == RED) {
+            if (X == parent->left) {
+                sibling->left->color = BLACK;
+                root = rbt_rr_rotate(sibling);
+            } 
+            else {
+                sibling->left->color = parent->color;
+                root = rbt_rr_rotate(sibling);
+                root = rbt_ll_rotate(parent);
+            }
+        } 
+        else if (sibling->right && sibling->right->color == RED) {
+            if (X == parent->right) {
+                sibling->right->color = BLACK;
+                root = rbt_ll_rotate(sibling);
+            } 
+            else {
+                sibling->right->color = parent->color;
+                root = rbt_ll_rotate(sibling);
+                root = rbt_rr_rotate(parent);
+            }
+        }
+
+        parent->color = BLACK;
+        return root;
+    }
+}
+
 Node *rbt_insert(Node *root, struct packet *pkt, size_t *size) {
     Node *Z = NULL;
 
     root = node_insert(root, pkt, &Z);
     if (Z) {
         *size += 1;
-        rbt_balance(Z);
+        rbt_balance_insert(Z);
     }
 
     while (root && root->parent) 
@@ -82,39 +210,16 @@ Node *rbt_insert(Node *root, struct packet *pkt, size_t *size) {
 }
 
 
+
 Node *rbt_delete(Node *root, const unsigned short id) {
     if (!root)
         return NULL;
-
-    if (root->id < id)
-        root->right = rbt_delete(root->right, id);
-    else if (id < root->id)
+    if (id < root->id)
         root->left = rbt_delete(root->left, id);
+    else if (root->id < id)
+        root->right = rbt_delete(root->right, id);
 
-    if (!root->left || !root->right) {
-        Node *temp = root->left ? root->left : root->right;
-
-        if (!temp) {
-            temp = root;
-            root = NULL;
-        }
-        else {
-            Node *del = root;
-            *root = *temp;
-            node_destroy(del);
-        }
-    } 
-    else {
-        Node *successor = rbt_successor(root->right);
-        root->id = successor->id;
-        root->count = successor->count;
-        root->right = rbt_delete(root->right, successor->id);
-    }
-
-    if (!root)
-        return NULL;
-    
-    return rbt_balance(root);
+    return node_delete(root, root);
 }
 
 
@@ -170,7 +275,7 @@ Node *rbt_recolor(Node *Z) {
 }
 
 
-Node *rbt_balance(Node *Z) {
+Node *rbt_balance_insert(Node *Z) {
     if (!Z || !Z->parent) {
         if (Z)
             Z->color = BLACK;
@@ -181,15 +286,15 @@ Node *rbt_balance(Node *Z) {
         Node *uncle = rbt_uncle(Z);
         if (!uncle || uncle->color == BLACK) {
             Z = rbt_restructure(Z);
-            return rbt_balance(Z);
+            return rbt_balance_insert(Z);
         }
         else {
             Z = rbt_recolor(Z);
-            return rbt_balance(rbt_grandparent(Z));
+            return rbt_balance_insert(rbt_grandparent(Z));
         }
     }
 
-    return rbt_balance(Z->parent);
+    return rbt_balance_insert(Z->parent);
 }
 
 
@@ -348,4 +453,34 @@ void rbt_print_tree(Node *root, size_t space) {
         printf("%d(%s)\n", root->id, root->color == RED ? "R" : "B");
         rbt_print_tree(root->left, space);
     }
+}
+
+
+unsigned short rbt_next(Node *root, unsigned short *expected) {
+    if (!root)
+        return (unsigned short)-1;
+
+    unsigned short left = rbt_next(root->left, expected);
+
+    if (left != (unsigned short)-1)
+        return left;
+
+    if (root->id != *expected)
+        return *expected;
+
+    (*expected)++;
+
+    unsigned short right = rbt_next(root->right, expected);
+
+    if (right != (unsigned short)-1)
+        return right;
+
+    return (unsigned short)-1;
+}
+
+Node *rbt_sibling(Node *node) {
+    Node *parent = node->parent;
+    if (parent)
+        return parent->left == node ? parent->right : parent->left;
+    return NULL;
 }
