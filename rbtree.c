@@ -9,7 +9,7 @@ Node *node_init(const struct packet *pkt) {
     }
 
     node->id = pkt->acknum;
-    node->pkt =  *pkt;
+    node->count = 1;
     node->left = NULL;
     node->right = NULL;
     node->parent = NULL;
@@ -106,7 +106,8 @@ Node *rbt_delete(Node *root, const unsigned short id) {
     } 
     else {
         Node *successor = rbt_successor(root->right);
-        root->pkt = successor->pkt;
+        root->id = successor->id;
+        root->count = successor->count;
         root->right = rbt_delete(root->right, successor->id);
     }
 
@@ -312,7 +313,7 @@ void rbt_inorder(Node *root) {
     }
 
     rbt_inorder(root->left); 
-    printf("%d ", root->pkt.acknum);
+    printf("%d ", root->id);
     rbt_inorder(root->right); 
 }
 

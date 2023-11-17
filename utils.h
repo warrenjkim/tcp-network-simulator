@@ -17,6 +17,7 @@
 #define TIMEOUT 2
 #define MAX_SEQUENCE 1024
 
+#define MSG_CONFIRM 0x800
 
 
 // Packet Layout
@@ -47,8 +48,8 @@ typedef enum Color {
 
 
 typedef struct Node {
-    unsigned short id; // pkt.acknum
-    struct packet pkt;
+    unsigned short id;
+    size_t count;
     Color color;
     struct Node *parent;
     struct Node *left;
