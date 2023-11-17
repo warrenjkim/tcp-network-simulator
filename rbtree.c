@@ -1,27 +1,5 @@
 #include "utils.h"
 
-// Utility function to build a packet
-void build_packet(struct packet* pkt, unsigned short seqnum, unsigned short acknum, char last, char ack,unsigned int length, const char* payload) {
-    pkt->seqnum = seqnum;
-    pkt->acknum = acknum;
-    pkt->ack = ack;
-    pkt->last = last;
-    pkt->length = length;
-    memcpy(pkt->payload, payload, length);
-}
-
-// Utility function to print a packet
-void print_recv(struct packet* pkt) {
-    printf("RECV seqnum: %d acknum: %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", (pkt->ack) ? " ACK": "");
-}
-
-void print_send(struct packet* pkt, int resend) {
-    if (resend)
-        printf("RESEND seqnum: %d acknum: %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", pkt->ack ? " ACK": "");
-    else
-        printf("SEND seqnum: %d acknum: %d%s%s\n", pkt->seqnum, pkt->acknum, pkt->last ? " LAST": "", pkt->ack ? " ACK": "");
-}
-
 // node
 Node *node_init(const struct packet *pkt) {
     Node *node = (Node *)(malloc(sizeof(Node)));
@@ -48,6 +26,8 @@ void node_destroy(Node *node) {
 
 
 
+
+
 // red black tree
 
 Tree *rbt_init() {
@@ -62,6 +42,7 @@ Tree *rbt_init() {
 
     return tree;
 }
+
 
 Node *node_insert(Node *root, struct packet *pkt, Node **Z) {
     if (!root) {
@@ -80,6 +61,7 @@ Node *node_insert(Node *root, struct packet *pkt, Node **Z) {
 
     return root;
 }
+
 
 Node *rbt_insert(Node *root, struct packet *pkt, size_t *size) {
     Node *Z = NULL;
@@ -105,9 +87,9 @@ Node *rbt_delete(Node *root, const unsigned short id) {
         return NULL;
 
     if (root->id < id)
-        root->left = rbt_delete(root->left, id);
-    else if (id < root->id)
         root->right = rbt_delete(root->right, id);
+    else if (id < root->id)
+        root->left = rbt_delete(root->left, id);
 
     if (!root->left || !root->right) {
         Node *temp = root->left ? root->left : root->right;
