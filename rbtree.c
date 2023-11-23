@@ -447,7 +447,7 @@ void rbt_print_tree(Node *root, size_t space) {
         rbt_print_tree(root->right, space);
         printf("\n");
 
-        for (int i = 10; i < space; i++)
+        for (size_t i = 10; i < space; i++)
             printf(" ");
 
         printf("%d(%s)\n", root->id, root->color == RED ? "R" : "B");

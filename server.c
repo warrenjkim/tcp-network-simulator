@@ -55,14 +55,13 @@ int main() {
     // TODO: Receive file from the client and save it as output.txt
     struct packet buffer;
     struct packet ack_pkt;
-    int expected_seq_num = 0;
-    unsigned short seq_num = 0;
-    unsigned short ack_num = 0;
+    int expected_seq_num = 1;
+    unsigned short seq_num = 1;
+    unsigned short ack_num = 1;
     unsigned char ack = 0;
     unsigned char last = 0;
     unsigned short last_num = -1;
 
-    struct packet queue[WINDOW_SIZE];
     Heap *heap = heap_init();
 
     
@@ -73,35 +72,42 @@ int main() {
          if (buffer.last)
              last_num = buffer.seqnum;
 
-         seq_num = buffer.seqnum;
+         seq_num = buffer.seqnum < seq_num ? seq_num : buffer.seqnum;
 
-         heap = heap_push(heap, &buffer);
-         struct packet min_pkt = heap_top(heap);
-         printf("Min pkt: %d", min_pkt.seqnum);
-        
-         if (min_pkt.seqnum == expected_seq_num) {
+         if (expected_seq_num <= buffer.seqnum)
+             heap = heap_push(heap, &buffer);
+
+         if (0 < heap->size) {
+             struct packet min_pkt = heap_top(heap);
+             DEBUG_PRINT("Min pkt: %d\n", min_pkt.seqnum);
+
              while (min_pkt.seqnum == expected_seq_num && 0 < heap->size) {
                  expected_seq_num++;
-                 printf("writing %d\n", min_pkt.seqnum);
+                 DEBUG_PRINT("writing %d\n", min_pkt.seqnum);
                  size_t bytes_written = fwrite(min_pkt.payload, sizeof(char), min_pkt.length, fp);
-                 printf("bytes written: %ld\n", bytes_written);
+                 DEBUG_PRINT("bytes written: %ld\n", bytes_written);
                  heap = heap_pop(heap);
                  min_pkt = heap_top(heap);
              }
          }
+
          ack_num = expected_seq_num;
          
          if (expected_seq_num >= last_num)
              last = 1;
 
          build_packet(&ack_pkt, seq_num, ack_num, last, ack, 0, "");
-         sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), 0, (const struct sockaddr *) &client_addr_to, addr_size);
+         ssize_t timeout = sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), 0, (const struct sockaddr *) &client_addr_to, addr_size);
          print_send(&ack_pkt, ack);
-         printf("\n");
+         DEBUG_PRINT("\n");
+
+         if (timeout < 0) {
+         timeout = sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), 0, (const struct sockaddr *) &client_addr_to, addr_size);
+         print_send(&ack_pkt, ack);
+         }
 
          if (last)
              break;
-
     }
 
     fclose(fp);

@@ -14,11 +14,22 @@
 #define SERVER_PORT 6002
 #define CLIENT_PORT_TO 5001
 #define PAYLOAD_SIZE 1024
-#define WINDOW_SIZE 5
+#define WINDOW_SIZE 10
 #define TIMEOUT 2
 #define MAX_SEQUENCE 1024
 
 #define MSG_CONFIRM 0x800
+
+#define SMSS 1036
+#define IW 4
+
+
+// #define DEBUG
+#ifdef DEBUG
+#define DEBUG_PRINT(fmt, ...) printf(fmt, ##__VA_ARGS__)
+#else
+#define DEBUG_PRINT(fmt, ...)
+#endif
 
 
 // Packet Layout
@@ -66,8 +77,9 @@ typedef struct Tree {
 
 
 typedef struct Heap {
-    struct packet data[WINDOW_SIZE];
+    struct packet *data;
     size_t size;
+    size_t capacity;
 } Heap;
 
 Tree *rbt_init();
@@ -122,10 +134,12 @@ Heap *heap_heapify(Heap *heap, size_t index);
 
 
 typedef struct CQueue {
-    struct packet data[WINDOW_SIZE];
+    struct packet *data;
     size_t size;
     size_t head;
     size_t tail;
+    size_t max_size;
+    size_t capacity;
 } CQueue;
 
 CQueue *cqueue_init();
@@ -138,7 +152,9 @@ bool cqueue_empty(CQueue *queue);
 bool cqueue_full(CQueue *queue);
 
 struct packet *cqueue_get(CQueue *queue, const unsigned short seqnum);
+struct packet *cqueue_top(CQueue *queue);
 
+void cqueue_resize(CQueue *queue);
 
 
 

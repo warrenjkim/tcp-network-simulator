@@ -85,202 +85,86 @@ int main(int argc, char *argv[]) {
     struct packet pkt;
     struct packet ack_pkt;
     char buffer[PAYLOAD_SIZE];
-    unsigned short seq_num = 0;
-    unsigned short ack_num = 0;
+    unsigned short seq_num = 1;
+    unsigned short ack_num = 1;
     char last = 0;
     char ack = 0;
 
     ssize_t bytes_read = 0;
 
-    CQueue *queue = cqueue_init();
     ack_pkt.seqnum = -1;
     ack_pkt.acknum = -1;
     ack_pkt.last = 0;
+    int count = 0;
+    unsigned short old = 0;
+
+    unsigned int ssthresh = (unsigned int)(-1);
+    CQueue *cwnd = cqueue_init();
     
 
     while (1) {
+        printf("head %ld ", cwnd->head);
+        printf("tail %ld\n", cwnd->tail);
+        for (size_t i = 0; i < cwnd->size; i++) {
+            printf("%d ", cwnd->data[(cwnd->head + i) % cwnd->max_size].seqnum);
+        }
+        printf("\n");
+        DEBUG_PRINT("cwnd->size %ld\n", cwnd->size);
+        DEBUG_PRINT("cwnd->max_size %ld\n", cwnd->max_size);
+        DEBUG_PRINT("cwnd->capacity %ld\n", cwnd->capacity);
+
+        count = (old == ack_pkt.acknum) ? (count + 1) : 0;
+        old = ack_pkt.acknum;
+
         if (ack_pkt.last)
             break;
-        if (ack_pkt.acknum != (unsigned short)(-1))
-            queue = cqueue_pop(queue, ack_pkt.acknum);
 
-        if (queue->size < WINDOW_SIZE) {
+        if (ack_pkt.acknum != (unsigned short)(-1))
+            cwnd = cqueue_pop(cwnd, ack_pkt.acknum);
+
+        while (!cqueue_full(cwnd) && !last) {
             bytes_read = fread(buffer, sizeof(char), PAYLOAD_SIZE, fp);
+
             if (bytes_read < PAYLOAD_SIZE)
                 last = 1;
-            printf("bytes read: %ld\n", bytes_read);
+
+            DEBUG_PRINT("bytes read: %ld\n", bytes_read);
             build_packet(&pkt, seq_num++, ack_num++, last, ack, bytes_read, buffer);
             sendto(send_sockfd, &pkt, sizeof(pkt), MSG_CONFIRM, (const struct sockaddr *) &server_addr_to, addr_size);
-            queue = cqueue_push(queue, &pkt);
+            cwnd = cqueue_push(cwnd, &pkt);
             print_send(&pkt, ack);
+
+            printf("\n");
         }
-        else {
-            struct packet *resend = cqueue_get(queue, ack_pkt.acknum);
+
+        if (count == 3) {
+            old = cqueue_top(cwnd)->seqnum;
+            count = 0;
+            // size_t new_max = cwnd->max_size / 2;
+            // cwnd->max_size = new_max < 2 ? 2 : new_max;
+            struct packet *resend = cqueue_get(cwnd, ack_pkt.acknum);
+            if (!resend)
+                continue;
+            sendto(send_sockfd, resend, sizeof(*resend), MSG_CONFIRM, (const struct sockaddr *) &server_addr_to, addr_size);
+            print_send(resend, 1);
+        }
+
+        ssize_t timeout = recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL, (struct sockaddr *) &server_addr_from, &addr_size);
+        print_recv(&ack_pkt);
+        DEBUG_PRINT("\n");
+
+        if (timeout < 0) {
+            // size_t new_max = cwnd->max_size / 2;
+            // cwnd->max_size = new_max < 2 ? 2 : new_max;
+            struct packet *resend = cqueue_top(cwnd);
             if (!resend)
                 continue;
             sendto(send_sockfd, resend, sizeof(*resend), MSG_CONFIRM, (const struct sockaddr *) &server_addr_to, addr_size);
             print_send(resend, last);
         }
-
-        recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL, (struct sockaddr *) &server_addr_from, &addr_size);
-        print_recv(&ack_pkt);
-        printf("\n");
     }
 
 
-
-
-
-
-
-
-
-    // int i = 0;
-
-
-    // while (1) {
-    //     if ((ack_pkt.ack && i < WINDOW_SIZE) || seq_num == 0) {
-    //         bytes_read = fread(buffer, sizeof(char), PAYLOAD_SIZE, fp);
-    //         build_packet(&pkt, seq_num, ack_num, last, ack, sizeof(buffer) - 1, buffer);
-
-    //         sendto(send_sockfd, &pkt, sizeof(pkt), MSG_CONFIRM, (const struct sockaddr *) &server_addr_to, addr_size);
-    //         print_send(&pkt, last);
-
-    //         swnd[i++ % WINDOW_SIZE] = pkt;
-    //         seq_num++;
-    //         ack_num++;
-    //     }
-    //     else if (!ack_pkt.ack) {
-    //         sendto(send_sockfd, &swnd[ack_pkt.seqnum % WINDOW_SIZE], sizeof(swnd[ack_pkt.seqnum % WINDOW_SIZE]), MSG_CONFIRM, (const struct sockaddr *) &server_addr_to, addr_size);
-    //         print_send(&pkt, last);
-    //         printf("waiting...\n");
-    //     } else{
-
-    //         sendto(send_sockfd, &pkt, sizeof(pkt), MSG_CONFIRM, (const struct sockaddr *) &server_addr_to, addr_size);
-    //         print_send(&pkt, last);
-    //     }
-
-    //     recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL, (struct sockaddr *) &server_addr_from, &addr_size);
-    //     print_recv(&ack_pkt);
-    // }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    // struct packet swnd[1000];
-
-    // do {
-    //     bytes_read = fread(buffer, sizeof(char), PAYLOAD_SIZE, fp);
-
-    //     build_packet(&pkt, seq_num, ack_num, last, ack, sizeof(buffer) - 1, buffer);
-    //     swnd[i++] = pkt;
-
-    //     sendto(send_sockfd, &pkt, sizeof(pkt), MSG_CONFIRM, (const struct sockaddr *) &server_addr_to, addr_size);
-    //     print_send(&pkt, last);
-
-    //     recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL, (struct sockaddr *) &server_addr_from, &addr_size);
-    //     print_recv(&ack_pkt);
-
-    //     while (ack_pkt.last) {
-    //         if (ack_num <= ack_pkt.acknum)
-    //             break;
-    //         sendto(send_sockfd, &swnd[ack_pkt.acknum], sizeof(swnd[ack_pkt.acknum]), MSG_CONFIRM, (const struct sockaddr *) &server_addr_to, addr_size);
-    //         print_send(&swnd[ack_pkt.acknum], last);
-
-    //         recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL, (struct sockaddr *) &server_addr_from, &addr_size);
-    //         print_recv(&ack_pkt);
-    //     }
-    //     
-    //     seq_num = ack_pkt.seqnum;
-    //     ack_num = ack_pkt.acknum;
-
-    //     printf("\n");
-    // } while (0 < bytes_read);
-
-    // sendto(send_sockfd, NULL, 0, 0, (const struct sockaddr *) &server_addr_to, addr_size);
-
-
-    // struct packet cwnd;
-    // ssize_t bytes_read = 0;
-    // while (0 < (bytes_read = fread(buffer, sizeof(char), sizeof(buffer) - 1, fp))) {
-    //     build_packet(&pkt, seq_num, ack_num, last, ack, sizeof(buffer) - 1, buffer);
-    //     sendto(send_sockfd, &pkt, sizeof(pkt), 0, (const struct sockaddr *) &server_addr_to, addr_size);
-    //     print_send(&pkt, 0);
-
-    //     while (ack_pkt.last) {
-    //         sendto(send_sockfd, &cwnd, sizeof(cwnd), 0, (const struct sockaddr *) &server_addr_to, addr_size);
-    //         print_send(&pkt, 1);
-
-    //         recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL, (struct sockaddr *) &server_addr_from, &addr_size);
-    //         seq_num += 1;
-    //         ack_num = ack_pkt.acknum;
-    //         print_recv(&ack_pkt);
-    //     }
-
-    //     recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL, (struct sockaddr *) &server_addr_from, &addr_size);
-    //     seq_num += 1;
-    //     ack_num = ack_pkt.acknum + 1;
-    //     print_recv(&ack_pkt);
-    //     
-
-    //     cwnd = pkt;
-    // }
-
-    // sendto(send_sockfd, NULL, 0, 0, (const struct sockaddr *) &server_addr_to, addr_size);
-
- 
-    
     fclose(fp);
     close(listen_sockfd);
     close(send_sockfd);

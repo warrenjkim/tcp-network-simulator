@@ -4,6 +4,8 @@
 Heap *heap_init() {
     Heap *heap = (Heap *)(malloc(sizeof(Heap *)));
     heap->size = 0;
+    heap->capacity = WINDOW_SIZE;
+    heap->data = (struct packet *)(malloc(WINDOW_SIZE * sizeof(struct packet)));
 
     return heap;
 }
@@ -30,17 +32,6 @@ Heap *heap_push(Heap *heap, struct packet *pkt) {
     heap->data[pos] = *pkt;
 
     return heap;
-
-    // size_t pos = heap->size++;
-    // 
-    // while ((pkt->seqnum < heap->data[(pos - 1) / 2].seqnum) && 0 < pos) {
-    //     heap->data[pos] = heap->data[(pos - 1) / 2];
-    //     pos = (pos - 1) / 2;
-    // }
-
-    // heap->data[pos] = *pkt;
-
-    // return heap;
 }
 
 
@@ -78,8 +69,6 @@ Heap *heap_heapify(Heap *heap, size_t index) {
     heap->data[new_index] = heap->data[index];
     heap->data[index] = temp;
 
-
-
     return heap_heapify(heap, new_index);
 }
 
@@ -90,5 +79,6 @@ struct packet heap_top(Heap *heap) {
         build_packet(&pkt, -1, 0, 0, 0, 0, "");
         return pkt;
     }
+
     return heap->data[0];
 }
