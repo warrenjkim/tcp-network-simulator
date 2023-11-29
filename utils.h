@@ -14,7 +14,7 @@
 #define CLIENT_PORT_TO 5001
 #define PAYLOAD_SIZE 1024
 #define WINDOW_SIZE 5
-#define TIMEOUT 4
+#define TIMEOUT 5
 #define MAX_SEQUENCE 1024
 
 #ifndef MSG_CONFIRM
@@ -173,8 +173,8 @@ Heap *heap_pop(Heap *heap) {
 
   heap = heap_heapify(heap, 0);
 
-  if (heap_empty(heap) && WINDOW_SIZE < heap->capacity)
-    heap = heap_shrink(heap);
+  //if (heap_empty(heap) && WINDOW_SIZE < heap->capacity)
+  //  heap = heap_shrink(heap);
 
   return heap;
 }
