@@ -14,12 +14,14 @@
 #define CLIENT_PORT_TO 5001
 #define PAYLOAD_SIZE 1024
 #define WINDOW_SIZE 5
-#define TIMEOUT 3
+#define TIMEOUT 4
 #define MAX_SEQUENCE 1024
 
 #ifndef MSG_CONFIRM
 #define MSG_CONFIRM 0x800
 #endif
+
+#define MSS 1
 
 // Packet Layout
 // You may change this if you want to
@@ -296,6 +298,6 @@ struct packet *queue_top(Queue *queue) {
 
 bool queue_empty(Queue *queue) { return queue->size == 0; }
 
-bool queue_full(Queue *queue) { return queue->size >= (size_t)queue->max_size; }
+bool queue_full(Queue *queue) { return queue->size >= (size_t)(queue->max_size); }
 
 #endif

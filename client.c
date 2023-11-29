@@ -89,28 +89,114 @@ int main(int argc, char *argv[]) {
   char ack = 0;
 
   size_t bytes_read = 0;
-  int count = 0;
-  unsigned short old = 0;
-  size_t popped = 0;
-  size_t ssthresh = (unsigned)(-1);
+
   ack_pkt.seqnum = (unsigned short)(-1);
   ack_pkt.acknum = (unsigned short)(-1);
+
+  // fast retransmit
+  int count = 0;
+  unsigned short old_acknum = 0;
+
+  // window growth
+  size_t mss = 0;
+  size_t ssthresh = (unsigned)(-1);
+
+  bool fast_recovery;
 
   Queue *cwnd = queue_init();
 
   while (1) {
-    count = (old == ack_pkt.acknum) ? (count + 1) : 0;
-    old = ack_pkt.acknum;
+    if (ack_pkt.last || last)
+      break;
+    count = (old_acknum == ack_pkt.acknum) ? (count + MSS) : 0;
+    old_acknum = ack_pkt.acknum;
+
+    if (count == 0 && fast_recovery) {
+      cwnd->max_size = ssthresh;
+      fast_recovery = false;
+    } else if (count == 3) {
+      ssthresh = ((size_t)(cwnd->max_size / 2) < (2 * MSS))
+                     ? (2 * MSS)
+                     : (size_t)(cwnd->max_size / 2);
+      cwnd->max_size = ssthresh + (3 * MSS);
+      fast_recovery = true;
+
+      struct packet *resend = queue_get(cwnd, ack_pkt.acknum);
+
+      sendto(send_sockfd, resend, sizeof(*resend), MSG_CONFIRM,
+             (const struct sockaddr *)&server_addr_to, addr_size);
+      print_send(resend, 1);
+
+      // recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL,
+      //          (struct sockaddr *)&server_addr_from, &addr_size);
+      // print_recv(&ack_pkt);
+      // continue;
+    } else if (3 < count)
+      cwnd->max_size += (1 * MSS);
+
+    if (ack_pkt.acknum != (unsigned short)(-1)) {
+      mss = queue_pop(cwnd, ack_pkt.acknum);
+
+      if (cwnd->max_size <= ssthresh)
+        cwnd->max_size += mss;
+      else if (!fast_recovery || 0 < count)
+        cwnd->max_size += ((double)(MSS) / (size_t)(cwnd->max_size));
+    }
+
+    while (!queue_full(cwnd) && !last) {
+      bytes_read = fread(buffer, sizeof(char), PAYLOAD_SIZE, fp);
+
+      if (bytes_read < PAYLOAD_SIZE)
+        last = 1;
+
+      build_packet(&pkt, seq_num++, ack_num++, last, ack, bytes_read, buffer);
+
+      sendto(send_sockfd, &pkt, sizeof(pkt), MSG_CONFIRM,
+             (const struct sockaddr *)&server_addr_to, addr_size);
+      print_send(&pkt, last);
+
+      cwnd = queue_push(cwnd, &pkt);
+    }
+
+    ssize_t timeout =
+        recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL,
+                 (struct sockaddr *)&server_addr_from, &addr_size);
+    print_recv(&ack_pkt);
+
+    if (timeout < 0) {
+      ssthresh =
+          ((size_t)(cwnd->max_size / 2) < 2) ? 2 : (size_t)(cwnd->max_size / 2);
+      cwnd->max_size = 1 * MSS;
+
+      struct packet *resend = queue_top(cwnd);
+      sendto(send_sockfd, resend, sizeof(*resend), MSG_CONFIRM,
+             (const struct sockaddr *)&server_addr_to, addr_size);
+      print_send(resend, 1);
+    }
+    printf("\n");
+  }
+
+  /*
+  while (1) {
+    count = (old_acknum == ack_pkt.acknum) ? (count + 1) : 0;
+    old_acknum = ack_pkt.acknum;
+
+    if (count == 3) {
+      ssthresh = ((cwnd->max_size / 2) < 2) ? 2 : (cwnd->max_size / 2);
+      cwnd->max_size = ssthresh + 3;
+      fast_recovery = true;
+    }
 
     if (ack_pkt.last)
       break;
 
     if (ack_pkt.acknum != (unsigned short)(-1)) {
       popped = queue_pop(cwnd, ack_pkt.acknum);
+
       if (cwnd->max_size <= ssthresh)
         cwnd->max_size += popped;
-      else
-        cwnd->max_size += (double)1 / (size_t)cwnd->max_size;
+      else if (!fast_recovery)
+        cwnd->max_size += (double)(1) / (size_t)cwnd->max_size;
     }
 
     // printf("queue size: %ld, ", cwnd->size);
@@ -135,10 +221,7 @@ int main(int argc, char *argv[]) {
       cwnd->max_size++;
 
     if (count == 3) {
-      old = queue_top(cwnd)->seqnum;
-
-      ssthresh = ((cwnd->max_size / 2) < 2) ? 2 : (cwnd->max_size / 2);
-      cwnd->max_size = ssthresh + 3;
+      old_acknum = queue_top(cwnd)->seqnum;
 
       struct packet *resend = queue_get(cwnd, ack_pkt.acknum);
 
@@ -162,6 +245,7 @@ int main(int argc, char *argv[]) {
       // print_send(resend, last);
     }
   }
+  */
 
   fclose(fp);
   close(listen_sockfd);
