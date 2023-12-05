@@ -13,8 +13,8 @@
 #define SERVER_PORT 6002
 #define CLIENT_PORT_TO 5001
 #define PAYLOAD_SIZE 1024
-#define WINDOW_SIZE 5
-#define TIMEOUT 5
+#define WINDOW_SIZE 1000
+#define TIMEOUT 3
 #define MAX_SEQUENCE 1024
 
 #ifndef MSG_CONFIRM
@@ -300,4 +300,9 @@ bool queue_empty(Queue *queue) { return queue->size == 0; }
 
 bool queue_full(Queue *queue) { return queue->size >= (size_t)(queue->max_size); }
 
+typedef enum {
+    SLOW_START,
+    CONGESTION_AVOIDANCE,
+    FAST_RECOVERY
+} State;
 #endif
