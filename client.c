@@ -102,20 +102,12 @@ int main(int argc, char *argv[]) {
   ssize_t timeout = 0;
 
   while (1) {
-    // if (state == SLOW_START)
-    //   printf("slow start\n");
-    // else if (state == CONGESTION_AVOIDANCE)
-    //   printf("congestion avoidance\n");
-    // else if (state == FAST_RECOVERY)
-    //   printf("fast recovery\n");
-
     if (ack_pkt.last)
       break;
 
-    // printf("dup  %d\n", dup_ack);
     if (ack_pkt.acknum != (unsigned short)(-1)) {
       if (dup_pkt.acknum == ack_pkt.acknum) {
-        count += MSS;
+        count += mss;
       } else {
         mss = queue_pop(cwnd, ack_pkt.acknum);
         dup_pkt = ack_pkt;
@@ -124,21 +116,19 @@ int main(int argc, char *argv[]) {
     }
 
     if (state == SLOW_START) {
-        if (count == 0) {
-            cwnd->max_size += mss;
+      cwnd->max_size += mss;
 
-            if (ssthresh < cwnd->max_size)
-                state = CONGESTION_AVOIDANCE;
-        }
+      if (ssthresh < cwnd->max_size)
+        state = CONGESTION_AVOIDANCE;
     }
 
     else if (state == CONGESTION_AVOIDANCE) {
-        if (count == 0)
-            cwnd->max_size += ((double)(MSS) / (size_t)(cwnd->max_size));
+      cwnd->max_size += ((double)(MSS) / (size_t)(cwnd->max_size));
     }
 
     else if (state == FAST_RECOVERY) {
-      if (dup_pkt.seqnum != ack_pkt.seqnum || dup_pkt.acknum != ack_pkt.acknum) {
+      if (dup_pkt.seqnum != ack_pkt.seqnum ||
+          dup_pkt.acknum != ack_pkt.acknum) {
         cwnd->max_size = ssthresh;
         state = CONGESTION_AVOIDANCE;
       } else
@@ -154,11 +144,9 @@ int main(int argc, char *argv[]) {
       count = 0;
 
       struct packet *resend = queue_get(cwnd, dup_pkt.acknum);
-      // printf("resend seqnum %d\n", resend->seqnum);
 
       sendto(send_sockfd, resend, sizeof(*resend), MSG_CONFIRM,
              (const struct sockaddr *)&server_addr_to, addr_size);
-      // print_send(resend, 1);
     }
 
     if (timeout < 0) {
@@ -171,7 +159,6 @@ int main(int argc, char *argv[]) {
       struct packet *resend = queue_top(cwnd);
       sendto(send_sockfd, resend, sizeof(*resend), MSG_CONFIRM,
              (const struct sockaddr *)&server_addr_to, addr_size);
-      // print_send(resend, 1);
     }
 
     while (!queue_full(cwnd) && !last) {
@@ -186,18 +173,16 @@ int main(int argc, char *argv[]) {
 
       sendto(send_sockfd, &pkt, sizeof(pkt), MSG_CONFIRM,
              (const struct sockaddr *)&server_addr_to, addr_size);
-      // print_send(&pkt, 0);
 
       cwnd = queue_push(cwnd, &pkt);
+      // usleep(5);
     }
 
     timeout = recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_WAITALL,
                        (struct sockaddr *)&server_addr_from, &addr_size);
-    // print_recv(&ack_pkt);
 
     if (ack_pkt.last)
       break;
-    // printf("\n");
   }
 
   fclose(fp);

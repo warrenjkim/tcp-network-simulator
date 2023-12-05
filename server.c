@@ -66,7 +66,6 @@ int main() {
   while (1) {
     recv_len = recvfrom(listen_sockfd, &buffer, sizeof(buffer), MSG_WAITALL,
                         (struct sockaddr *)&client_addr_from, &addr_size);
-    // print_recv(&buffer);
 
     if (buffer.last)
       last_seqnum = buffer.seqnum;
@@ -76,20 +75,11 @@ int main() {
     if (expected_seq_num <= buffer.seqnum)
       heap = heap_push(heap, &buffer);
 
-    // printf("heap size: %ld, ", heap->size);
-    // printf("heap capacity: %ld\n", heap->capacity);
-
     struct packet min_pkt = heap_top(heap);
-    // for (size_t i = 0; i < heap->size; i++) {
-    //     printf("%d ", heap->data[i].seqnum);
-    // }
-    // printf("\n");
+
     while (0 < heap->size && (expected_seq_num == min_pkt.seqnum)) {
-      // printf("heap size %ld\n", heap->size);
       expected_seq_num++;
-        size_t bytes_written =
-          fwrite(min_pkt.payload, sizeof(char), min_pkt.length, fp);
-      // printf("\nwrote seqnum %d", min_pkt.seqnum);
+      fwrite(min_pkt.payload, sizeof(char), min_pkt.length, fp);
       heap = heap_pop(heap);
       min_pkt = heap_top(heap);
     }
@@ -102,13 +92,9 @@ int main() {
     build_packet(&ack_pkt, seq_num, ack_num, last, ack, 0, "");
     sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_CONFIRM,
            (const struct sockaddr *)&client_addr_to, addr_size);
-    // printf("\n");
-    // print_send(&ack_pkt, 0);
 
     if (last)
       break;
-
-    // printf("\n");
   }
 
   fclose(fp);

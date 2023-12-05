@@ -1,0 +1,42 @@
+#!/bin/sh
+
+
+
+make clean && make build
+serverKill=$(ps aux | grep "./server" | awk '{print $2}')
+kill $serverKill
+clientKill=$(ps aux | grep "./client" | awk '{print $2}')
+kill $clientKill
+touch output.txt
+rm graph.csv
+clear
+
+./server &
+serverPID=$!
+
+time ./client input.txt &
+clientPID=$!
+
+INPUT=$(ls -l | grep "input" | awk '{print $5}')
+i=0
+
+while true; do
+    OUTPUT=$(ls -l | grep 'output' | awk '{print $5}')
+    if [ "$INPUT" = "$OUTPUT" ]; then
+        if [ "$(diff input.txt output.txt)" = "" ]; then
+            echo "passed"
+        else
+            echo "failed"
+        fi
+        break
+    else
+        echo "$i,$OUTPUT" | tee -a graph.csv
+        ((i++))
+        sleep 1
+    fi
+done
+
+wait $clientPID
+wait $serverPID
+
+exit
