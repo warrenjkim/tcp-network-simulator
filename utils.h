@@ -21,9 +21,9 @@
 
 #define SCALE 10
 
-#ifndef MSG_CONFIRM
-#define MSG_CONFIRM 0x800
-#endif
+// #ifndef MSG_CONFIRM
+// #define MSG_CONFIRM 0x800
+// #endif
 
 #define MSS 1
 // Packet Layout

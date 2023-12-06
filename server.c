@@ -58,6 +58,7 @@ int main() {
     unsigned short ack_num = 0;
     char last = 0;
     char ack = 1;
+    unsigned short last_num = 0;
 
     Heap *heap = heap_init();
 
@@ -92,6 +93,9 @@ int main() {
 
         printf("server: ");
         print_recv(&buffer);
+
+        if (buffer.last)
+            last_num = buffer.seqnum;
 
         if (expected_seq_num <= buffer.seqnum)
             heap = heap_push(heap, &buffer);
@@ -134,7 +138,8 @@ int main() {
         printf("server: ");
         print_send(&ack_pkt, 0);
 
-        if (buffer.last && buffer.seqnum <= expected_seq_num) {
+        if (buffer.last && last_num == expected_seq_num - 1) {
+            last = 1;
             if (write_bytes) {
                 fwrite(buf, sizeof(char), write_bytes, fp);
                 i = 0;
@@ -148,7 +153,6 @@ int main() {
         printf("\n");
     }
 
-    last = 1;
     build_packet(&ack_pkt, seq_num, ack_num, last, ack, 0, "");
     sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_CONFIRM,
            (const struct sockaddr *)&client_addr_to, addr_size);

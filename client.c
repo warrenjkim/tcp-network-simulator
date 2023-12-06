@@ -83,7 +83,6 @@ int main(int argc, char *argv[]) {
     char last = 0;
     char ack = 0;
 
-
     ack_pkt.seqnum = 0;
     ack_pkt.acknum = 0;
     ack_pkt.last = 0;
@@ -106,21 +105,55 @@ int main(int argc, char *argv[]) {
         perror("stat error");
         exit(1);
     }
-    
+
     char *file = (char *)malloc(sizeof(char) * info.st_size);
     if (!file) {
         perror("malloc error");
         exit(1);
     }
 
-    if (fread(file, sizeof(char), info.st_size, fp) != (unsigned long) info.st_size) {
-        perror("fread error");        
+    if (fread(file, sizeof(char), info.st_size, fp) !=
+        (unsigned long)info.st_size) {
+        perror("fread error");
         exit(1);
     }
 
     int i = -1;
 
     while (1) {
+        if (recv_len < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            ssthresh = (size_t)(cwnd->max_size) / 2 < 2
+                           ? 2
+                           : (size_t)(cwnd->max_size) / 2;
+            cwnd->max_size = MSS;
+            state = SLOW_START;
+
+            struct packet *resend = queue_top(cwnd);
+            sendto(send_sockfd, resend, sizeof(struct packet), MSG_CONFIRM,
+                   (const struct sockaddr *)&server_addr_to, addr_size);
+
+            /* if (1000000 <= (tv.tv_usec *= 1.5)) { */
+            /*     tv.tv_sec += tv.tv_usec / 1000000; */
+            /*     tv.tv_usec %= 1000000; */
+            /* } */
+
+            /* if (setsockopt(listen_sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, */
+            /*                sizeof(tv)) < 0) { */
+            /*     perror("couldn't set receive timeout"); */
+            /*     return 1; */
+            /* } */
+
+            /* printf("timeout: "); */
+            /* print_send(resend, 1); */
+
+            /* recv_len = */
+            /*     recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), 0, */
+            /*              (struct sockaddr *)&server_addr_from, &addr_size); */
+
+            /* printf("client: "); */
+            /* print_recv(&ack_pkt); */
+        }
+
         mss = queue_pop(cwnd, ack_pkt.acknum);
 
         if (mss == 0)
@@ -140,14 +173,14 @@ int main(int argc, char *argv[]) {
                 cwnd->max_size = ssthresh;
                 state = SLOW_START;
 
-                // tv.tv_sec = 0;
-                // tv.tv_usec = TIMEOUT * 100000;
+/*                 tv.tv_sec = 0; */
+/*                 tv.tv_usec = TIMEOUT * 100000; */
 
-                // if (setsockopt(listen_sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) <
-                //         0) {
-                //     perror("couldn't set receive timeout");
-                //     return 1;
-                // }
+/*                 if (setsockopt(listen_sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, */
+/*                                sizeof(tv)) < 0) { */
+/*                     perror("couldn't set receive timeout"); */
+/*                     return 1; */
+/*                 } */
                 break;
             }
             dup_count = 0;
@@ -170,40 +203,13 @@ int main(int argc, char *argv[]) {
             print_send(resend, 1);
         }
 
-        if (recv_len < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            ssthresh = (size_t)(cwnd->max_size) / 2 < 2
-                           ? 2
-                           : (size_t)(cwnd->max_size) / 2;
-            cwnd->max_size = MSS;
-            state = SLOW_START;
-
-            struct packet *resend = queue_top(cwnd);
-            sendto(send_sockfd, resend, sizeof(struct packet), MSG_CONFIRM,
-                   (const struct sockaddr *)&server_addr_to, addr_size);
-
-            // if (1000000 <= (tv.tv_usec *= 2)) {
-            //     tv.tv_sec += tv.tv_usec / 1000000;
-            //     tv.tv_usec %= 1000000;
-            // }
-
-            // if (setsockopt(listen_sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) <
-            //         0) {
-            //     perror("couldn't set receive timeout");
-            //     return 1;
-            // }
-
-            printf("timeout: ");
-            print_send(resend, 1);
-        }
-
         // send while cwnd is not full
         while (!queue_full(cwnd) && !last) {
             off_t bytes_read = info.st_size - (++i * PAYLOAD_SIZE);
             if (bytes_read < PAYLOAD_SIZE) {
                 memcpy(buffer, file + (i * PAYLOAD_SIZE), bytes_read);
                 last = 1;
-            }
-            else {
+            } else {
                 bytes_read = PAYLOAD_SIZE;
                 memcpy(buffer, file + (i * PAYLOAD_SIZE), PAYLOAD_SIZE);
             }
@@ -231,7 +237,8 @@ int main(int argc, char *argv[]) {
         printf("client: ");
         print_recv(&ack_pkt);
 
-        if (ack_pkt.last && queue_top(cwnd)->seqnum <= ack_pkt.acknum)
+        if (ack_pkt.last &&
+            (queue_top(cwnd)->seqnum <= ack_pkt.acknum || queue_empty(cwnd)))
             break;
 
         printf("\n");

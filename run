@@ -1,0 +1,20 @@
+#!/bin/sh
+make clean && make build
+./kill
+touch output.txt
+clear
+
+python3 ./rdcc_proxy.py --test_type $1 -l $2> /dev/null &
+proxyPID=$!
+
+time ./server &
+serverPID=$!
+
+./client input.txt &
+clientPID=$!
+
+
+wait $serverPID
+
+kill $proxyPID
+exit
