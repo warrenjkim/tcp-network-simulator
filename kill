@@ -1,0 +1,7 @@
+#!/bin/sh
+
+
+serverKill=$(ps aux | grep "./server$" | awk '{print $2}')
+kill $serverKill
+clientKill=$(ps aux | grep "./client input.txt$" | awk '{print $2}')
+kill $clientKill

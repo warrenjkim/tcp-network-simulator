@@ -3,18 +3,18 @@
 
 
 make clean && make build
-serverKill=$(ps aux | grep "./server" | awk '{print $2}')
+serverKill=$(ps aux | grep "./server$" | awk '{print $2}')
 kill $serverKill
-clientKill=$(ps aux | grep "./client" | awk '{print $2}')
+clientKill=$(ps aux | grep "./client input.txt$" | awk '{print $2}')
 kill $clientKill
 touch output.txt
 rm graph.csv
 clear
 
-./server &
+time ./server > /dev/null &
 serverPID=$!
 
-time ./client input.txt &
+./client input.txt > /dev/null &
 clientPID=$!
 
 INPUT=$(ls -l | grep "input" | awk '{print $5}')
@@ -32,7 +32,6 @@ while true; do
     else
         echo "$i,$OUTPUT" | tee -a graph.csv
         ((i++))
-        sleep 1
     fi
 done
 
