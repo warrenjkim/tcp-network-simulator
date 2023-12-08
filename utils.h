@@ -1,10 +1,10 @@
 #ifndef UTILS_H
 #define UTILS_H
+#include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 #include <sys/stat.h>
 
 // MACROS
@@ -14,16 +14,16 @@
 #define CLIENT_PORT 6001
 #define SERVER_PORT 6002
 #define CLIENT_PORT_TO 5001
-#define PAYLOAD_SIZE 1024
+#define PAYLOAD_SIZE 1188
 #define WINDOW_SIZE 100
-#define TIMEOUT 1.5
+#define TIMEOUT 0.4
 #define MAX_SEQUENCE 1024
 
-#define SCALE 10
+#define SCALE 100
 
-// #ifndef MSG_CONFIRM
-// #define MSG_CONFIRM 0x800
-// #endif
+#ifndef MSG_CONFIRM
+#define MSG_CONFIRM 0x800
+#endif
 
 #define MSS 1
 // Packet Layout
@@ -72,7 +72,17 @@ typedef struct Heap {
 
 Heap *heap_init() {
     Heap *heap = (Heap *)(malloc(sizeof(Heap)));
+    if (!heap) {
+        perror("heap: malloc failed");
+        exit(1);
+    }
+
     heap->data = (struct packet *)(malloc(WINDOW_SIZE * sizeof(struct packet)));
+    if (!heap->data) {
+        perror("heap->data: malloc failed");
+        exit(1);
+    }
+
     heap->size = 0;
     heap->capacity = WINDOW_SIZE;
 
@@ -80,26 +90,27 @@ Heap *heap_init() {
 }
 
 void heap_destroy(Heap *heap) {
+    if (!heap) {
+        return;
+    }
+
     free(heap->data);
     free(heap);
 }
 
-Heap *heap_shrink(Heap *heap) {
-    struct packet *temp =
-        (struct packet *)(malloc(WINDOW_SIZE * sizeof(struct packet)));
-
-    free(heap->data);
-    heap->data = temp;
-    heap->capacity = WINDOW_SIZE;
-
-    return heap;
-}
-
 Heap *heap_grow(Heap *heap) {
+    if (!heap) {
+        return heap_init();
+    }
+
     struct packet *temp = (struct packet *)(malloc(
         (size_t)(1.5 * heap->capacity * sizeof(struct packet))));
-    memcpy(temp, heap->data, heap->capacity * sizeof(struct packet));
+    if (!temp) {
+        perror("heap_grow(): malloc failed");
+        exit(1);
+    }
 
+    memcpy(temp, heap->data, heap->size * sizeof(struct packet));
     heap->capacity *= 1.5;
     free(heap->data);
     heap->data = temp;
@@ -107,32 +118,81 @@ Heap *heap_grow(Heap *heap) {
     return heap;
 }
 
-struct packet heap_top(Heap *heap) {
-    if (heap->size == 0) {
-        struct packet pkt;
-        build_packet(&pkt, -1, -1, 0, 0, 0, "");
-        return pkt;
+Heap *heap_heapify(Heap *heap, size_t index) {
+    if (!heap) {
+        return heap_init();
     }
 
-    return heap->data[0];
+    size_t left = (index * 2) + 1;
+    size_t right = (index * 2) + 2;
+    size_t min = index;
+
+    if (heap->size < left || heap->size < right) {
+        return heap;
+    }
+
+    if (heap->data[left].seqnum < heap->data[min].seqnum) {
+        min = left;
+    }
+
+    if (heap->data[right].seqnum < heap->data[min].seqnum) {
+        min = right;
+    }
+
+    if (min != index) {
+        struct packet temp = heap->data[index];
+        heap->data[index] = heap->data[min];
+        heap->data[min] = temp;
+        heap_heapify(heap, min);
+    }
+
+    return heap;
 }
 
-bool heap_empty(Heap *heap) { return heap->size == 0; }
+bool heap_empty(Heap *heap) {
+    if (!heap) {
+        perror("heap_empty(): heap is NULL");
+        exit(1);
+    }
 
-bool heap_full(Heap *heap) { return heap->size == heap->capacity; }
+    return heap->size == 0;
+}
+
+bool heap_full(Heap *heap) {
+    if (!heap) {
+        perror("heap_full(): heap is NULL");
+        exit(1);
+    }
+
+    return heap->size == heap->capacity;
+}
+
+struct packet *heap_top(Heap *heap) {
+    if (!heap) {
+        perror("heap_top(): heap is NULL");
+        exit(1);
+    }
+
+    if (heap_empty(heap)) {
+        return NULL;
+    }
+
+    return &heap->data[0];
+}
 
 Heap *heap_push(Heap *heap, struct packet *pkt) {
+    if (!heap) {
+        return heap_push(heap_init(), pkt);
+    }
+
     if (heap_empty(heap)) {
         heap->data[heap->size++] = *pkt;
         return heap;
     }
 
-    for (size_t i = 0; i < heap->size; i++)
-        if (heap->data[i].seqnum == pkt->seqnum)
-            return heap;
-
-    if (heap_full(heap))
+    if (heap_full(heap)) {
         heap = heap_grow(heap);
+    }
 
     size_t pos = heap->size++;
 
@@ -146,38 +206,20 @@ Heap *heap_push(Heap *heap, struct packet *pkt) {
     return heap;
 }
 
-Heap *heap_heapify(Heap *heap, size_t index) {
-    size_t left = (index * 2) + 1;
-    size_t right = (index * 2) + 2;
-    size_t min = index;
-
-    if (heap->size < left || heap->size < right)
-        return heap;
-
-    if (heap->data[left].seqnum < heap->data[min].seqnum)
-        min = left;
-
-    if (heap->data[right].seqnum < heap->data[min].seqnum)
-        min = right;
-
-    if (min != index) {
-        struct packet temp = heap->data[index];
-        heap->data[index] = heap->data[min];
-        heap->data[min] = temp;
-        heap_heapify(heap, min);
+Heap *heap_pop(Heap *heap) {
+    if (!heap) {
+        perror("heap_pop(): heap is NULL");
+        exit(1);
     }
 
-    return heap;
-}
-
-Heap *heap_pop(Heap *heap) {
     heap->size--;
     heap->data[0] = heap->data[heap->size];
 
     heap = heap_heapify(heap, 0);
 
-    // if (heap_empty(heap) && WINDOW_SIZE < heap->capacity)
-    //   heap = heap_shrink(heap);
+    if (heap_empty(heap)) {
+        return heap_init();
+    }
 
     return heap;
 }
@@ -191,9 +233,12 @@ typedef struct Node {
 
 Node *node_init() {
     Node *node = (Node *)(malloc(sizeof(Node)));
+    if (!node) {
+        perror("node: malloc failed");
+        exit(1);
+    }
 
     node->next = NULL;
-
     node->head = 0;
     node->tail = 0;
 
@@ -216,6 +261,10 @@ typedef struct Queue {
 
 Queue *queue_init() {
     Queue *queue = (Queue *)(malloc(sizeof(Queue)));
+    if (!queue) {
+        perror("queue: malloc failed");
+        exit(1);
+    }
 
     queue->size = 0;
     queue->max_size = 1;
@@ -228,15 +277,25 @@ Queue *queue_init() {
 }
 
 void queue_destroy(Queue *queue) {
-    if (queue->front)
+    if (!queue) {
+        return;
+    }
+
+    if (queue->front) {
         node_destroy(queue->front);
-    if (queue->back)
+    }
+
+    if (queue->back) {
         node_destroy(queue->back);
+    }
 
     free(queue);
 }
 
 Queue *queue_shrink(Queue *queue) {
+    if (!queue) {
+        return queue_init();
+    }
     Node *temp = queue->front;
     queue->front = temp->next;
     node_destroy(temp);
@@ -245,6 +304,9 @@ Queue *queue_shrink(Queue *queue) {
 }
 
 Queue *queue_grow(Queue *queue) {
+    if (!queue) {
+        return queue_init();
+    }
     Node *temp = queue->back;
     temp->next = node_init();
     queue->back = temp->next;
@@ -252,35 +314,83 @@ Queue *queue_grow(Queue *queue) {
     return queue;
 }
 
+bool queue_empty(Queue *queue) {
+    if (!queue) {
+        perror("queue_empty(): queue is NULL");
+        exit(1);
+    }
+
+    return queue->size == 0;
+}
+
+bool queue_full(Queue *queue) {
+    if (!queue) {
+        perror("queue_full(): queue is NULL");
+        exit(1);
+    }
+
+    return queue->size >= (size_t)(queue->max_size);
+}
+
 struct packet *queue_get(Queue *queue, const unsigned short seqnum) {
+    if (!queue) {
+        perror("queue_get(): queue is NULL");
+        exit(1);
+    }
+
     Node *front = queue->front;
 
     while (front) {
         for (size_t i = 0; (i + front->head) < queue->capacity; i++) {
-            if (front->data[i + front->head].seqnum == seqnum)
+            if (front->data[i + front->head].seqnum == seqnum) {
                 return &front->data[i + front->head];
+            }
         }
+
         front = front->next;
     }
 
     return NULL;
 }
 
+struct packet *queue_top(Queue *queue) {
+    if (!queue) {
+        perror("queue_top(): queue is NULL");
+        exit(1);
+    }
+
+    return &queue->front->data[queue->front->head];
+}
+
 Queue *queue_push(Queue *queue, struct packet *pkt) {
+    if (!queue) {
+        perror("queue_push(): queue is NULL");
+        exit(1);
+    }
+
     Node *back = queue->back;
+    if (!back) {
+        perror("queue_push(): queue->back is NULL");
+        exit(1);
+    }
+
     back->data[back->tail] = *pkt;
     back->tail++;
     queue->size++;
 
-    if (back->tail == queue->capacity)
+    if (back->tail == queue->capacity) {
         queue = queue_grow(queue);
+    }
 
     return queue;
 }
 
-bool queue_empty(Queue *queue) { return queue->size == 0; }
-
 size_t queue_pop(Queue *queue, unsigned short seqnum) {
+    if (!queue) {
+        perror("queue_pop(): queue is NULL");
+        exit(1);
+    }
+
     if (queue_empty(queue))
         return 0;
 
@@ -292,8 +402,9 @@ size_t queue_pop(Queue *queue, unsigned short seqnum) {
         queue->size--;
         popped++;
 
-        if (front->head == WINDOW_SIZE)
+        if (front->head == WINDOW_SIZE) {
             queue = queue_shrink(queue);
+        }
 
         front = queue->front;
     }
@@ -301,13 +412,5 @@ size_t queue_pop(Queue *queue, unsigned short seqnum) {
     return popped;
 }
 
-struct packet *queue_top(Queue *queue) {
-    return &queue->front->data[queue->front->head];
-}
-
-bool queue_full(Queue *queue) {
-    return queue->size >= (size_t)(queue->max_size);
-}
-
-typedef enum { SLOW_START, CONGESTION_AVOIDANCE, FAST_RECOVERY } State;
+typedef enum State { SLOW_START, CONGESTION_AVOIDANCE, FAST_RECOVERY } State;
 #endif
