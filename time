@@ -1,20 +1,20 @@
 #!/bin/sh
-
-
-
 make clean && make build
-serverKill=$(ps aux | grep "./server$" | awk '{print $2}')
-kill $serverKill
-clientKill=$(ps aux | grep "./client input.txt$" | awk '{print $2}')
-kill $clientKill
+./kill
 touch output.txt
 rm graph.csv
 clear
 
-time ./server > /dev/null &
+TT=${1:-rd}
+LR=${2:-0.1}
+
+python3 ./rdcc_proxy.py --test_type $TT -l $LR > /dev/null &
+proxyPID=$!
+
+time ./server &
 serverPID=$!
 
-./client input.txt > /dev/null &
+./client input.txt &
 clientPID=$!
 
 INPUT=$(ls -l | grep "input" | awk '{print $5}')
@@ -35,7 +35,15 @@ while true; do
     fi
 done
 
-wait $clientPID
 wait $serverPID
+
+kill $proxyPID
+kill $clientPID
+
+if [ "$(diff input.txt output.txt)" = "" ]; then
+    echo "passed"
+else
+    echo "failed"
+fi
 
 exit

@@ -4,17 +4,29 @@ make clean && make build
 touch output.txt
 clear
 
-python3 ./rdcc_proxy.py --test_type $1 -l $2> /dev/null &
+TT=${1:-rd}
+LR=${2:-0.1}
+
+python3 ./rdcc_proxy.py --test_type $TT -l $LR > /dev/null &
 proxyPID=$!
 
 time ./server &
 serverPID=$!
 
-./client input.txt &
+./client $3 &
 clientPID=$!
+
 
 
 wait $serverPID
 
 kill $proxyPID
+kill $clientPID
+
+if [ "$(diff $3 output.txt)" = "" ]; then
+    echo "passed"
+else
+    echo "failed"
+fi
+
 exit

@@ -1,2 +1,5 @@
 Please concisely describe your congestion control scheme here.
 No need to be verbose, brief descriptions/bullet points are preferred.
+
+* i read the slides and implemented the congestion control exactly as outlined in the ch 3. slides.
+* i did not implement the exponential backoff for RTO timeout.

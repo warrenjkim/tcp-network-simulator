@@ -16,16 +16,14 @@
 #define CLIENT_PORT_TO 5001
 #define PAYLOAD_SIZE 1188
 #define WINDOW_SIZE 100
-#define TIMEOUT 0.4
-#define MAX_SEQUENCE 1024
-
-#define SCALE 100
+#define TIMEOUT 2.2
 
 #ifndef MSG_CONFIRM
-#define MSG_CONFIRM 0x800
+#define MSG_CONFIRM 0
 #endif
 
 #define MSS 1
+
 // Packet Layout
 // You may change this if you want to
 struct packet {
@@ -238,6 +236,9 @@ Node *node_init() {
         exit(1);
     }
 
+    for (size_t i = 0; i < WINDOW_SIZE; i++) {
+        build_packet(&node->data[i], 0, 0, 0, 0, 0, "");
+    }
     node->next = NULL;
     node->head = 0;
     node->tail = 0;
@@ -281,13 +282,14 @@ void queue_destroy(Queue *queue) {
         return;
     }
 
-    if (queue->front) {
+    while (queue->front) {
+        Node *next = queue->front->next;
         node_destroy(queue->front);
+        queue->front = next;
     }
 
-    if (queue->back) {
-        node_destroy(queue->back);
-    }
+    queue->front = NULL;
+    queue->back = NULL;
 
     free(queue);
 }
@@ -341,9 +343,9 @@ struct packet *queue_get(Queue *queue, const unsigned short seqnum) {
     Node *front = queue->front;
 
     while (front) {
-        for (size_t i = 0; (i + front->head) < queue->capacity; i++) {
-            if (front->data[i + front->head].seqnum == seqnum) {
-                return &front->data[i + front->head];
+        for (size_t i = front->head; i < queue->capacity; i++) {
+            if (front->data[i].seqnum == seqnum) {
+                return &front->data[i];
             }
         }
 
@@ -385,24 +387,28 @@ Queue *queue_push(Queue *queue, struct packet *pkt) {
     return queue;
 }
 
-size_t queue_pop(Queue *queue, unsigned short seqnum) {
+size_t queue_pop_cum(Queue *queue, unsigned short acknum) {
     if (!queue) {
-        perror("queue_pop(): queue is NULL");
+        perror("queue_pop_cum(): queue is NULL");
         exit(1);
     }
 
-    if (queue_empty(queue))
+    if (queue_empty(queue)) {
         return 0;
+    }
 
     size_t popped = 0;
     Node *front = queue->front;
-    while (front && 0 < queue->size &&
-           front->data[front->head].seqnum < seqnum) {
-        front->head++;
-        queue->size--;
-        popped++;
+    while (front && !queue_empty(queue) &&
+           front->data[front->head].seqnum < acknum) {
+        if (front->data[front->head].length != 0) {
+            popped++;
+            queue->size--;
+        }
 
-        if (front->head == WINDOW_SIZE) {
+        front->head++;
+
+        if (front->head == queue->capacity) {
             queue = queue_shrink(queue);
         }
 
@@ -410,6 +416,50 @@ size_t queue_pop(Queue *queue, unsigned short seqnum) {
     }
 
     return popped;
+}
+
+void printq(Queue *queue) {
+    Node *front = queue->front;
+    size_t i = 0;
+    while (front) {
+        if (front->data[i + front->head].length != 0) {
+            printf("%d ", front->data[i + front->head].seqnum);
+        }
+        i++;
+        if (i + front->head == queue->capacity) {
+            printf("| ");
+            front = front->next;
+            i = 0;
+        }
+    }
+    printf("\n");
+}
+
+size_t queue_pop(Queue *queue, unsigned short seqnum) {
+    if (!queue) {
+        perror("queue_pop(): queue is NULL");
+        exit(1);
+    }
+
+    Node *front = queue->front;
+
+    while (front && !queue_empty(queue)) {
+        for (size_t i = front->head; i < queue->capacity; i++) {
+            if (front->data[i].seqnum == seqnum) {
+                if (front->data[i].length != 0) {
+                    front->data[i].length = 0;
+                    queue->size--;
+                    return 1;
+                }
+
+                return 0;
+            }
+        }
+
+        front = front->next;
+    }
+
+    return 0;
 }
 
 typedef enum State { SLOW_START, CONGESTION_AVOIDANCE, FAST_RECOVERY } State;
