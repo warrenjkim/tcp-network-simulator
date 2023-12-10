@@ -76,12 +76,12 @@ int main(int argc, char *argv[]) {
     // TODO: Read from file, and initiate reliable data transfer to the server
 
     struct packet pkt;
-    struct packet ack_pkt = {0};
+    struct packet ack_pkt = { 0 };
     char buffer[PAYLOAD_SIZE];
     unsigned short seq_num = 0;
     unsigned short ack_num = 0;
     char last = 0;
-    char ack = 0;
+    char ack = 1;
 
     State state = SLOW_START;
 
@@ -112,8 +112,8 @@ int main(int argc, char *argv[]) {
     }
 
     while (1) {
-        if (0 < recv_len) {
-            mss = queue_pop(cwnd, ack_pkt.seqnum) + queue_pop_cum(cwnd, ack_pkt.acknum);
+        if (0 <= recv_len) {
+            mss = queue_pop_cum(cwnd, ack_pkt.acknum) + queue_pop(cwnd, ack_pkt.seqnum);
         }
 
         if (mss == 0) {
@@ -129,13 +129,14 @@ int main(int argc, char *argv[]) {
                 }
                 break;
             case CONGESTION_AVOIDANCE:
-                cwnd->max_size += (double)(MSS) / (size_t)(cwnd->max_size);
+                cwnd->max_size += (double)(MSS) / cwnd->max_size;
                 break;
             case FAST_RECOVERY:
                 cwnd->max_size = ssthresh;
                 state = SLOW_START;
                 break;
             }
+
             dup_count = 0;
         }
 
@@ -144,7 +145,6 @@ int main(int argc, char *argv[]) {
         }
 
         if (dup_count == 3) {
-            dup_count = 0;
             state = FAST_RECOVERY;
             ssthresh = (size_t)(cwnd->max_size) / 2 < 2
                            ? 2
@@ -152,12 +152,12 @@ int main(int argc, char *argv[]) {
             cwnd->max_size = ssthresh + 3;
 
             struct packet *resend = queue_top(cwnd);
-            sendto(send_sockfd, resend, sizeof(struct packet), MSG_CONFIRM,
+            sendto(send_sockfd, resend, sizeof(struct packet), 0,
                    (const struct sockaddr *)&server_addr_to, addr_size);
 
-            recv_len =
-                recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), 0,
-                         (struct sockaddr *)&server_addr_from, &addr_size);
+            recv_len = recvfrom(listen_sockfd, &ack_pkt, sizeof(struct packet), 0,
+                    (struct sockaddr *)&server_addr_from, &addr_size);
+
             continue;
         }
 
@@ -170,12 +170,12 @@ int main(int argc, char *argv[]) {
             state = SLOW_START;
 
             struct packet *resend = queue_top(cwnd);
-            sendto(send_sockfd, resend, sizeof(struct packet), MSG_CONFIRM,
+            sendto(send_sockfd, resend, sizeof(struct packet), 0,
                    (const struct sockaddr *)&server_addr_to, addr_size);
 
-            recv_len =
-                recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), 0,
-                         (struct sockaddr *)&server_addr_from, &addr_size);
+            recv_len = recvfrom(listen_sockfd, &ack_pkt, sizeof(struct packet), 0,
+                    (struct sockaddr *)&server_addr_from, &addr_size);
+
             continue;
         }
 
@@ -192,7 +192,7 @@ int main(int argc, char *argv[]) {
 
             build_packet(&pkt, seq_num++, ack_num++, last, ack, bytes_read,
                          buffer);
-            sendto(send_sockfd, &pkt, sizeof(struct packet), MSG_CONFIRM,
+            sendto(send_sockfd, &pkt, sizeof(struct packet), 0,
                    (const struct sockaddr *)&server_addr_to, addr_size);
 
             cwnd = queue_push(cwnd, &pkt);
@@ -208,7 +208,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    queue_destroy(cwnd);
     fclose(fp);
     close(listen_sockfd);
     close(send_sockfd);

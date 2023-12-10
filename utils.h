@@ -14,13 +14,9 @@
 #define CLIENT_PORT 6001
 #define SERVER_PORT 6002
 #define CLIENT_PORT_TO 5001
-#define PAYLOAD_SIZE 1188
+#define PAYLOAD_SIZE 1190
 #define WINDOW_SIZE 100
 #define TIMEOUT 2.2
-
-#ifndef MSG_CONFIRM
-#define MSG_CONFIRM 0
-#endif
 
 #define MSS 1
 
@@ -31,14 +27,14 @@ struct packet {
     unsigned short acknum;
     char ack;
     char last;
-    unsigned int length;
+    unsigned short length;
     char payload[PAYLOAD_SIZE];
 };
 
 // Utility function to build a packet
 void build_packet(struct packet *pkt, unsigned short seqnum,
                   unsigned short acknum, char last, char ack,
-                  unsigned int length, const char *payload) {
+                  unsigned short length, const char *payload) {
     pkt->seqnum = seqnum;
     pkt->acknum = acknum;
     pkt->ack = ack;
@@ -102,14 +98,14 @@ Heap *heap_grow(Heap *heap) {
     }
 
     struct packet *temp = (struct packet *)(malloc(
-        (size_t)(1.5 * heap->capacity * sizeof(struct packet))));
+        (size_t)(2 * heap->capacity * sizeof(struct packet))));
     if (!temp) {
         perror("heap_grow(): malloc failed");
         exit(1);
     }
 
     memcpy(temp, heap->data, heap->size * sizeof(struct packet));
-    heap->capacity *= 1.5;
+    heap->capacity *= 2;
     free(heap->data);
     heap->data = temp;
 
@@ -121,27 +117,30 @@ Heap *heap_heapify(Heap *heap, size_t index) {
         return heap_init();
     }
 
-    size_t left = (index * 2) + 1;
-    size_t right = (index * 2) + 2;
-    size_t min = index;
+    while (true) {
+        size_t left = (index * 2) + 1;
+        size_t right = (index * 2) + 2;
+        size_t min = index;
 
-    if (heap->size < left || heap->size < right) {
-        return heap;
-    }
+        if (left < heap->size &&
+            heap->data[left].seqnum < heap->data[min].seqnum) {
+            min = left;
+        }
 
-    if (heap->data[left].seqnum < heap->data[min].seqnum) {
-        min = left;
-    }
+        if (right < heap->size &&
+            heap->data[right].seqnum < heap->data[min].seqnum) {
+            min = right;
+        }
 
-    if (heap->data[right].seqnum < heap->data[min].seqnum) {
-        min = right;
-    }
+        if (min != index) {
+            struct packet temp = heap->data[index];
+            heap->data[index] = heap->data[min];
+            heap->data[min] = temp;
 
-    if (min != index) {
-        struct packet temp = heap->data[index];
-        heap->data[index] = heap->data[min];
-        heap->data[min] = temp;
-        heap_heapify(heap, min);
+            index = min;
+        } else {
+            break;
+        }
     }
 
     return heap;
@@ -401,11 +400,12 @@ size_t queue_pop_cum(Queue *queue, unsigned short acknum) {
     Node *front = queue->front;
     while (front && !queue_empty(queue) &&
            front->data[front->head].seqnum < acknum) {
-        if (front->data[front->head].length != 0) {
+        if (front->data[front->head].ack != 0) {
             popped++;
             queue->size--;
         }
 
+        front->data[front->head].ack = 0;
         front->head++;
 
         if (front->head == queue->capacity) {
@@ -418,45 +418,23 @@ size_t queue_pop_cum(Queue *queue, unsigned short acknum) {
     return popped;
 }
 
-void printq(Queue *queue) {
-    Node *front = queue->front;
-    size_t i = 0;
-    while (front) {
-        if (front->data[i + front->head].length != 0) {
-            printf("%d ", front->data[i + front->head].seqnum);
-        }
-        i++;
-        if (i + front->head == queue->capacity) {
-            printf("| ");
-            front = front->next;
-            i = 0;
-        }
-    }
-    printf("\n");
-}
-
 size_t queue_pop(Queue *queue, unsigned short seqnum) {
     if (!queue) {
         perror("queue_pop(): queue is NULL");
         exit(1);
     }
 
-    Node *front = queue->front;
-
-    while (front && !queue_empty(queue)) {
-        for (size_t i = front->head; i < queue->capacity; i++) {
-            if (front->data[i].seqnum == seqnum) {
-                if (front->data[i].length != 0) {
-                    front->data[i].length = 0;
-                    queue->size--;
-                    return 1;
-                }
-
-                return 0;
+    Node *back = queue->back;
+    for (size_t i = back->head; i < queue->capacity; i++) {
+        if (back->data[i].seqnum == seqnum) {
+            if (back->data[i].ack != 0) {
+                back->data[i].ack = 0;
+                queue->size--;
+                return 1;
             }
-        }
 
-        front = front->next;
+            return 0;
+        }
     }
 
     return 0;

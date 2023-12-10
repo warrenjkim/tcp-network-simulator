@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -73,7 +74,7 @@ int main() {
 
         // process packets in order
         min_pkt = heap_top(heap);
-        while (min_pkt && (expected_seq_num == min_pkt->seqnum) && min_pkt->length != 0) {
+        while (min_pkt && (expected_seq_num == min_pkt->seqnum) && min_pkt->length) {
             expected_seq_num++;
 
             fwrite(min_pkt->payload, sizeof(char), min_pkt->length, fp);
@@ -88,7 +89,7 @@ int main() {
 
         build_packet(&ack_pkt, seq_num = buffer.seqnum,
                      ack_num = expected_seq_num, last, ack, 0, "");
-        sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_CONFIRM,
+        sendto(send_sockfd, &ack_pkt, sizeof(struct packet), 0,
                (const struct sockaddr *)&client_addr_to, addr_size);
 
         if (last) {
@@ -97,7 +98,7 @@ int main() {
     }
 
     build_packet(&ack_pkt, seq_num, ack_num, last, ack, 0, "");
-    sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), MSG_CONFIRM,
+    sendto(send_sockfd, &ack_pkt, sizeof(ack_pkt), 0,
            (const struct sockaddr *)&client_addr_to, addr_size);
 
     heap_destroy(heap);
