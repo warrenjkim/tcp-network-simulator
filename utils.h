@@ -14,9 +14,9 @@
 #define CLIENT_PORT 6001
 #define SERVER_PORT 6002
 #define CLIENT_PORT_TO 5001
-#define PAYLOAD_SIZE 1190
+#define PAYLOAD_SIZE 1192
 #define WINDOW_SIZE 100
-#define TIMEOUT 2.2
+#define TIMEOUT 2.1
 
 #define MSS 1
 
@@ -440,5 +440,25 @@ size_t queue_pop(Queue *queue, unsigned short seqnum) {
     return 0;
 }
 
+void printq(Queue *queue) {
+    Node *front = queue->front;
+    size_t i = 0;
+
+    while (front) {
+        if (front->data[i + front->head].ack != 0) {
+            printf("%d ", front->data[i + front->head].seqnum);
+        }
+        i++;
+
+        if (i + front->head == queue->capacity) {
+            printf("| ");
+            front = front->next;
+            i = 0;
+        }
+    }
+    printf("\n");
+}
+
 typedef enum State { SLOW_START, CONGESTION_AVOIDANCE, FAST_RECOVERY } State;
+
 #endif

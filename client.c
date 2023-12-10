@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
     // TODO: Read from file, and initiate reliable data transfer to the server
 
     struct packet pkt;
-    struct packet ack_pkt = { 0 };
+    struct packet ack_pkt = {0};
     char buffer[PAYLOAD_SIZE];
     unsigned short seq_num = 0;
     unsigned short ack_num = 0;
@@ -113,7 +113,8 @@ int main(int argc, char *argv[]) {
 
     while (1) {
         if (0 <= recv_len) {
-            mss = queue_pop_cum(cwnd, ack_pkt.acknum) + queue_pop(cwnd, ack_pkt.seqnum);
+            mss = queue_pop_cum(cwnd, ack_pkt.acknum) +
+                  queue_pop(cwnd, ack_pkt.seqnum);
         }
 
         if (mss == 0) {
@@ -155,9 +156,9 @@ int main(int argc, char *argv[]) {
             sendto(send_sockfd, resend, sizeof(struct packet), 0,
                    (const struct sockaddr *)&server_addr_to, addr_size);
 
-            recv_len = recvfrom(listen_sockfd, &ack_pkt, sizeof(struct packet), 0,
-                    (struct sockaddr *)&server_addr_from, &addr_size);
-
+            recv_len =
+                recvfrom(listen_sockfd, &ack_pkt, sizeof(struct packet), 0,
+                         (struct sockaddr *)&server_addr_from, &addr_size);
             continue;
         }
 
@@ -173,9 +174,9 @@ int main(int argc, char *argv[]) {
             sendto(send_sockfd, resend, sizeof(struct packet), 0,
                    (const struct sockaddr *)&server_addr_to, addr_size);
 
-            recv_len = recvfrom(listen_sockfd, &ack_pkt, sizeof(struct packet), 0,
-                    (struct sockaddr *)&server_addr_from, &addr_size);
-
+            recv_len =
+                recvfrom(listen_sockfd, &ack_pkt, sizeof(struct packet), 0,
+                         (struct sockaddr *)&server_addr_from, &addr_size);
             continue;
         }
 
